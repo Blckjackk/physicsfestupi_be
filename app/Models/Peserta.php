@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+// use Laravel\Sanctum\HasApiTokens; // Commented out temporarily
 
 /**
  * @property int $id
@@ -33,7 +34,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class Peserta extends Authenticatable
 {
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable; // Removed HasApiTokens temporarily
 
     /**
      * The table associated with the model.

@@ -3,10 +3,19 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\PesertaController;
 
 
 Route::get('/user', function (Request $request) {
     return $request->user();
+});
+
+// Test route untuk debugging
+Route::get('/test', function () {
+    return response()->json([
+        'message' => 'API is working!',
+        'timestamp' => now()
+    ]);
 });
 
 // Admin routes untuk mengelola sistem CBT

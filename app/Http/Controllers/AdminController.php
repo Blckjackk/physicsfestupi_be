@@ -65,6 +65,8 @@ class AdminController extends Controller
                 ], 422);
             }
 
+            \DB::beginTransaction();
+
             // Buat peserta baru
             $peserta = Peserta::create([
                 'username' => $request->username,
@@ -73,18 +75,45 @@ class AdminController extends Controller
                 'nilai_total' => $request->nilai_total
             ]);
 
+            // Otomatis buat aktivitas peserta untuk semua ujian yang ada dengan status belum_login
+            $ujian_list = Ujian::all();
+            $aktivitas_created = [];
+
+            foreach ($ujian_list as $ujian) {
+                $aktivitas = AktivitasPeserta::create([
+                    'peserta_id' => $peserta->id,
+                    'ujian_id' => $ujian->id,
+                    'status' => 'belum_login',
+                    'waktu_login' => null,
+                    'waktu_submit' => null
+                ]);
+
+                $aktivitas_created[] = [
+                    'ujian_id' => $ujian->id,
+                    'nama_ujian' => $ujian->nama_ujian,
+                    'status' => 'belum_login'
+                ];
+            }
+
+            \DB::commit();
+
             return response()->json([
                 'success' => true,
-                'message' => 'Peserta berhasil dibuat',
+                'message' => 'Peserta berhasil dibuat dengan status otomatis untuk semua ujian',
                 'data' => [
-                    'id' => $peserta->id,
-                    'username' => $peserta->username,
-                    'nilai_total' => $peserta->nilai_total,
-                    'created_at' => $peserta->created_at
+                    'peserta' => [
+                        'id' => $peserta->id,
+                        'username' => $peserta->username,
+                        'nilai_total' => $peserta->nilai_total,
+                        'created_at' => $peserta->created_at
+                    ],
+                    'total_ujian' => count($aktivitas_created),
+                    'aktivitas_ujian' => $aktivitas_created
                 ]
             ], 201);
 
         } catch (\Exception $e) {
+            \DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal membuat peserta',
@@ -258,6 +287,8 @@ class AdminController extends Controller
                 ], 422);
             }
 
+            \DB::beginTransaction();
+
             // Buat ujian baru
             $ujian = Ujian::create([
                 'nama_ujian' => $request->nama_ujian,
@@ -266,13 +297,40 @@ class AdminController extends Controller
                 'waktu_akhir_pengerjaan' => $request->waktu_akhir_pengerjaan
             ]);
 
+            // Otomatis buat aktivitas peserta untuk semua peserta yang ada dengan status belum_login
+            $peserta_list = Peserta::all();
+            $aktivitas_created = [];
+
+            foreach ($peserta_list as $peserta) {
+                $aktivitas = AktivitasPeserta::create([
+                    'peserta_id' => $peserta->id,
+                    'ujian_id' => $ujian->id,
+                    'status' => 'belum_login',
+                    'waktu_login' => null,
+                    'waktu_submit' => null
+                ]);
+
+                $aktivitas_created[] = [
+                    'peserta_id' => $peserta->id,
+                    'username' => $peserta->username,
+                    'status' => 'belum_login'
+                ];
+            }
+
+            \DB::commit();
+
             return response()->json([
                 'success' => true,
-                'message' => 'Ujian berhasil dibuat',
-                'data' => $ujian
+                'message' => 'Ujian berhasil dibuat dengan status otomatis untuk semua peserta',
+                'data' => [
+                    'ujian' => $ujian,
+                    'total_peserta' => count($aktivitas_created),
+                    'aktivitas_peserta' => $aktivitas_created
+                ]
             ], 201);
 
         } catch (\Exception $e) {
+            \DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal membuat ujian',

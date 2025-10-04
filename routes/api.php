@@ -5,13 +5,12 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AdminController;
 
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+Route::get('/user', function (Request $request) {
     return $request->user();
 });
 
 // Admin routes untuk mengelola sistem CBT
 Route::prefix('admin')->group(function () {
-    
     // CRUD Peserta
     Route::get('/peserta', [AdminController::class, 'getPeserta']); // GET /api/admin/peserta
     Route::post('/peserta', [AdminController::class, 'createPeserta']); // POST /api/admin/peserta
@@ -30,8 +29,4 @@ Route::prefix('admin')->group(function () {
     Route::put('/soal/{id}', [AdminController::class, 'updateSoal']); // PUT /api/admin/soal/{id}
     Route::delete('/soal/{id}', [AdminController::class, 'deleteSoal']); // DELETE /api/admin/soal/{id}
     
-    // CRUD Jawaban (untuk testing/manual input)
-    Route::post('/jawaban', [AdminController::class, 'createJawaban']); // POST /api/admin/jawaban
-    Route::put('/jawaban/{id}', [AdminController::class, 'updateJawaban']); // PUT /api/admin/jawaban/{id}
-    Route::delete('/jawaban/{id}', [AdminController::class, 'deleteJawaban']); // DELETE /api/admin/jawaban/{id}
 });

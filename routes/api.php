@@ -23,6 +23,9 @@ Route::prefix('admin')->group(function () {
     // Authentication
     Route::post('/login', [AdminController::class, 'loginAdmin']); // POST /api/admin/login
     
+    // Dashboard
+    Route::get('/dashboard', [AdminController::class, 'getDashboard']); // GET /api/admin/dashboard
+    
     // CRUD Peserta
     Route::get('/peserta', [AdminController::class, 'getPeserta']); // GET /api/admin/peserta
     Route::post('/peserta', [AdminController::class, 'createPeserta']); // POST /api/admin/peserta

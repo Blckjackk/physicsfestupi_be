@@ -85,6 +85,45 @@ class AdminController extends Controller
         }
     }
 
+    // ====== DASHBOARD ======
+
+    /**
+     * Get dashboard statistics
+     * 
+     * @return JsonResponse
+     */
+    public function getDashboard(): JsonResponse
+    {
+        try {
+            // Total peserta
+            $totalPeserta = Peserta::count();
+            
+            // Count peserta berdasarkan status aktivitas
+            $belumMulai = AktivitasPeserta::where('status', 'belum_mulai')->distinct('peserta_id')->count('peserta_id');
+            $sedangMengerjakan = AktivitasPeserta::where('status', 'sedang_mengerjakan')->distinct('peserta_id')->count('peserta_id');
+            $sudahSubmit = AktivitasPeserta::where('status', 'sudah_submit')->distinct('peserta_id')->count('peserta_id');
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Data dashboard berhasil diambil',
+                'data' => [
+                    'peserta_ujian' => $totalPeserta,
+                    'belum_mulai' => $belumMulai,
+                    'sedang_mengerjakan' => $sedangMengerjakan,
+                    'sudah_submit' => $sudahSubmit,
+                    'last_updated' => now()
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil data dashboard',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     // ====== PESERTA MANAGEMENT ======
 
     /**

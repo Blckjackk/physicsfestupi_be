@@ -56,12 +56,26 @@ class PesertaController extends Controller
             // $token = $peserta->createToken('peserta-token')->plainTextToken;
             $token = 'temporary-token-' . $peserta->id . '-' . time();
 
+            // Get aktivitas peserta untuk ujian_id = 1 (default)
+            // Cek status apakah peserta sudah submit atau belum
+            $aktivitas = AktivitasPeserta::where('peserta_id', $peserta->id)
+                                       ->where('ujian_id', 1)
+                                       ->first();
+
+            $aktivitas_data = [
+                'ujian_id' => 1,
+                'status' => $aktivitas ? $aktivitas->status : 'belum_login',
+                'waktu_login' => $aktivitas ? $aktivitas->waktu_login : null,
+                'waktu_submit' => $aktivitas ? $aktivitas->waktu_submit : null
+            ];
+
             return response()->json([
                 'success' => true,
                 'message' => 'Login berhasil',
                 'data' => [
                     'peserta' => $peserta,
-                    'token' => $token
+                    'token' => $token,
+                    'aktivitas_ujian' => $aktivitas_data
                 ]
             ]);
 

@@ -818,6 +818,184 @@ class AdminController extends Controller
         }
     }
 
+    // ====== JAWABAN & HASIL UJIAN ======
+
+    /**
+     * Get hasil ujian semua peserta - Dashboard hasil ujian
+     * 
+     * @return JsonResponse
+     */
+    public function getJawabanPeserta(): JsonResponse
+    {
+        try {
+            // Ambil semua aktivitas peserta yang sudah login dengan relasi yang diperlukan
+            $aktivitasPeserta = AktivitasPeserta::with([
+                'peserta:id,username',
+                'ujian:id,nama_ujian',
+                'ujian.soal:id,ujian_id' // Untuk hitung jumlah soal
+            ])
+            ->whereIn('status', ['sedang_mengerjakan', 'selesai']) // Hanya yang sudah mulai ujian
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+            // Format data hasil ujian
+            $hasilUjian = $aktivitasPeserta->map(function ($aktivitas, $index) {
+                // Hitung jumlah soal di ujian
+                $jumlahSoal = $aktivitas->ujian->soal->count();
+                
+                // Hitung jumlah soal yang sudah dijawab peserta
+                $terjawab = Jawaban::where('peserta_id', $aktivitas->peserta_id)
+                                  ->where('ujian_id', $aktivitas->ujian_id)
+                                  ->whereNotNull('jawaban_peserta')
+                                  ->count();
+
+                return [
+                    'no' => $index + 1,
+                    'username' => $aktivitas->peserta->username,
+                    'nama_ujian' => $aktivitas->ujian->nama_ujian,
+                    'mulai' => $aktivitas->waktu_login ? $aktivitas->waktu_login->format('d/m/Y H:i:s') : '-',
+                    'selesai' => $aktivitas->waktu_submit ? $aktivitas->waktu_submit->format('d/m/Y H:i:s') : '-',
+                    'jumlah_soal' => $jumlahSoal,
+                    'terjawab' => $terjawab,
+                    'progress' => $jumlahSoal > 0 ? round(($terjawab / $jumlahSoal) * 100, 1) . '%' : '0%',
+                    'status' => $aktivitas->status === 'selesai' ? 'Selesai' : 'Sedang Ujian',
+                    'peserta_id' => $aktivitas->peserta_id,
+                    'ujian_id' => $aktivitas->ujian_id,
+                    'aktivitas_id' => $aktivitas->id
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Data hasil ujian berhasil diambil',
+                'data' => $hasilUjian,
+                'summary' => [
+                    'total_peserta_ujian' => $hasilUjian->count(),
+                    'sedang_ujian' => $hasilUjian->where('status', 'Sedang Ujian')->count(),
+                    'sudah_selesai' => $hasilUjian->where('status', 'Selesai')->count(),
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil data hasil ujian',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get detail jawaban peserta per ujian
+     * 
+     * @param int $pesertaId
+     * @param int $ujianId
+     * @return JsonResponse
+     */
+    public function getDetailJawabanPeserta(int $pesertaId, int $ujianId): JsonResponse
+    {
+        try {
+            // Validasi peserta dan ujian
+            $peserta = Peserta::find($pesertaId);
+            $ujian = Ujian::find($ujianId);
+            
+            if (!$peserta) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Peserta tidak ditemukan'
+                ], 404);
+            }
+
+            if (!$ujian) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ujian tidak ditemukan'
+                ], 404);
+            }
+
+            // Ambil aktivitas peserta
+            $aktivitas = AktivitasPeserta::where('peserta_id', $pesertaId)
+                                        ->where('ujian_id', $ujianId)
+                                        ->first();
+
+            if (!$aktivitas) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Peserta tidak terdaftar di ujian ini'
+                ], 404);
+            }
+
+            // Ambil semua soal ujian dengan jawaban peserta
+            $soalDenganJawaban = Soal::where('ujian_id', $ujianId)
+                ->with(['jawaban' => function($query) use ($pesertaId) {
+                    $query->where('peserta_id', $pesertaId);
+                }])
+                ->orderBy('nomor_soal', 'asc')
+                ->get()
+                ->map(function ($soal) {
+                    $jawaban = $soal->jawaban->first();
+                    
+                    return [
+                        'nomor_soal' => $soal->nomor_soal,
+                        'pertanyaan' => $soal->pertanyaan,
+                        'opsi_a' => $soal->opsi_a,
+                        'opsi_b' => $soal->opsi_b,
+                        'opsi_c' => $soal->opsi_c,
+                        'opsi_d' => $soal->opsi_d,
+                        'opsi_e' => $soal->opsi_e,
+                        'jawaban_benar' => $soal->jawaban_benar,
+                        'jawaban_peserta' => $jawaban ? $jawaban->jawaban_peserta : null,
+                        'is_correct' => $jawaban ? $jawaban->benar : null,
+                        'status_jawaban' => $jawaban ? 
+                            ($jawaban->jawaban_peserta ? 'dijawab' : 'kosong') : 'kosong'
+                    ];
+                });
+
+            // Hitung statistik
+            $totalSoal = $soalDenganJawaban->count();
+            $dijawab = $soalDenganJawaban->where('status_jawaban', 'dijawab')->count();
+            $benar = $soalDenganJawaban->where('is_correct', true)->count();
+            $salah = $soalDenganJawaban->where('is_correct', false)->count();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Detail jawaban peserta berhasil diambil',
+                'data' => [
+                    'peserta' => [
+                        'id' => $peserta->id,
+                        'username' => $peserta->username
+                    ],
+                    'ujian' => [
+                        'id' => $ujian->id,
+                        'nama_ujian' => $ujian->nama_ujian
+                    ],
+                    'aktivitas' => [
+                        'status' => $aktivitas->status,
+                        'waktu_login' => $aktivitas->waktu_login,
+                        'waktu_submit' => $aktivitas->waktu_submit,
+                        'durasi' => $aktivitas->getDurationInMinutes()
+                    ],
+                    'statistik' => [
+                        'total_soal' => $totalSoal,
+                        'dijawab' => $dijawab,
+                        'kosong' => $totalSoal - $dijawab,
+                        'benar' => $benar,
+                        'salah' => $salah,
+                        'nilai' => $totalSoal > 0 ? round(($benar / $totalSoal) * 100, 2) : 0
+                    ],
+                    'soal_jawaban' => $soalDenganJawaban
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil detail jawaban peserta',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     // ====== SOAL MANAGEMENT ======
 
     /**

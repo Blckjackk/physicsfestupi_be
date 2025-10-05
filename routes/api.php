@@ -40,6 +40,10 @@ Route::prefix('admin')->group(function () {
     Route::post('/soal', [AdminController::class, 'createSoal']); // POST /api/admin/soal
     Route::put('/soal/{id}', [AdminController::class, 'updateSoal']); // PUT /api/admin/soal/{id}
     Route::delete('/soal/{id}', [AdminController::class, 'deleteSoal']); // DELETE /api/admin/soal/{id}
+    
+    // Jawaban & Hasil Ujian
+    Route::get('/jawaban/peserta', [AdminController::class, 'getJawabanPeserta']); // GET /api/admin/jawaban/peserta
+    Route::get('/jawaban/peserta/{peserta_id}/ujian/{ujian_id}', [AdminController::class, 'getDetailJawabanPeserta']); // GET /api/admin/jawaban/peserta/{peserta_id}/ujian/{ujian_id}
 });
 
 // Peserta routes untuk sistem CBT

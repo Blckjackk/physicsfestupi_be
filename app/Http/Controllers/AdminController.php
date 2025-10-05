@@ -7,10 +7,12 @@ use App\Models\Ujian;
 use App\Models\Soal;
 use App\Models\AktivitasPeserta;
 use App\Models\Jawaban;
+use App\Exports\HasilUjianExport;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Maatwebsite\Excel\Facades\Excel;
 
 class AdminController extends Controller
 {
@@ -993,6 +995,168 @@ class AdminController extends Controller
                 'message' => 'Gagal mengambil detail jawaban peserta',
                 'error' => $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Export hasil ujian ke Excel
+     * 
+     * @param int $ujianId
+     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse|\Illuminate\Http\JsonResponse
+     */
+    public function exportHasilUjian(int $ujianId)
+    {
+        try {
+            // Validasi ujian
+            $ujian = Ujian::find($ujianId);
+            
+            if (!$ujian) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ujian tidak ditemukan'
+                ], 404);
+            }
+
+            // Cek apakah ada peserta yang sudah mengambil ujian
+            $aktivitasCount = AktivitasPeserta::where('ujian_id', $ujianId)
+                                            ->whereIn('status', ['sedang_mengerjakan', 'selesai'])
+                                            ->count();
+
+            if ($aktivitasCount == 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Belum ada peserta yang mengambil ujian ini'
+                ], 400);
+            }
+
+            // Generate filename dengan timestamp
+            $timestamp = now()->format('Y-m-d_H-i-s');
+            $cleanUjianName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $ujian->nama_ujian);
+            $filename = "Hasil_Ujian_{$cleanUjianName}_{$timestamp}.xlsx";
+
+            // Set headers untuk download
+            $headers = [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Cache-Control' => 'max-age=0',
+                'Cache-Control' => 'max-age=1',
+                'Expires' => 'Mon, 26 Jul 1997 05:00:00 GMT',
+                'Last-Modified' => gmdate('D, d M Y H:i:s') . ' GMT',
+                'Cache-Control' => 'cache, must-revalidate',
+                'Pragma' => 'public',
+            ];
+
+            return Excel::download(
+                new HasilUjianExport($ujianId),
+                $filename,
+                \Maatwebsite\Excel\Excel::XLSX,
+                $headers
+            );
+
+        } catch (\Exception $e) {
+            \Log::error('Export Excel Error: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal export hasil ujian',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get info export hasil ujian (untuk preview sebelum download)
+     * 
+     * @param int $ujianId
+     * @return JsonResponse
+     */
+    public function getInfoExportUjian(int $ujianId): JsonResponse
+    {
+        try {
+            // Validasi ujian
+            $ujian = Ujian::find($ujianId);
+            
+            if (!$ujian) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ujian tidak ditemukan'
+                ], 404);
+            }
+
+            // Hitung statistik
+            $totalSoal = Soal::where('ujian_id', $ujianId)->count();
+            $totalPeserta = AktivitasPeserta::where('ujian_id', $ujianId)
+                                          ->whereIn('status', ['sedang_mengerjakan', 'selesai'])
+                                          ->count();
+            $sedangUjian = AktivitasPeserta::where('ujian_id', $ujianId)
+                                         ->where('status', 'sedang_mengerjakan')
+                                         ->count();
+            $sudahSelesai = AktivitasPeserta::where('ujian_id', $ujianId)
+                                          ->where('status', 'selesai')
+                                          ->count();
+
+            // Perkiraan kolom yang akan diexport
+            $kolomDasar = 13; // Username, Status, Waktu, dll
+            $kolomSoal = $totalSoal * 4; // Setiap soal = 4 kolom (Pertanyaan, Jawaban Benar, Jawaban Peserta, Status)
+            $totalKolom = $kolomDasar + $kolomSoal;
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Info export berhasil diambil',
+                'data' => [
+                    'ujian' => [
+                        'id' => $ujian->id,
+                        'nama_ujian' => $ujian->nama_ujian,
+                        'deskripsi' => $ujian->deskripsi,
+                        'waktu_mulai_pengerjaan' => $ujian->waktu_mulai_pengerjaan,
+                        'waktu_akhir_pengerjaan' => $ujian->waktu_akhir_pengerjaan
+                    ],
+                    'statistik' => [
+                        'total_soal' => $totalSoal,
+                        'total_peserta_export' => $totalPeserta,
+                        'sedang_ujian' => $sedangUjian,
+                        'sudah_selesai' => $sudahSelesai,
+                        'estimasi_kolom' => $totalKolom,
+                        'estimasi_baris' => $totalPeserta + 1 // +1 untuk header
+                    ],
+                    'export_info' => [
+                        'format' => 'Excel (.xlsx)',
+                        'kolom_dasar' => [
+                            'No', 'Username', 'Nama Ujian', 'Status', 'Waktu Login', 
+                            'Waktu Submit', 'Durasi (Menit)', 'Total Soal', 'Dijawab', 
+                            'Kosong', 'Benar', 'Salah', 'Nilai'
+                        ],
+                        'kolom_per_soal' => [
+                            'Soal X', 'Jawaban Benar X', 'Jawaban Peserta X', 'Status X'
+                        ],
+                        'estimated_size' => $this->estimateFileSize($totalPeserta, $totalKolom),
+                        'can_export' => $totalPeserta > 0 && $totalSoal > 0
+                    ]
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil info export',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Estimate file size for export
+     */
+    private function estimateFileSize($totalRows, $totalCols): string
+    {
+        // Estimasi kasar: 50 bytes per cell + overhead Excel
+        $estimatedBytes = ($totalRows * $totalCols * 50) + 10240; // 10KB overhead
+        
+        if ($estimatedBytes < 1024) {
+            return $estimatedBytes . ' bytes';
+        } elseif ($estimatedBytes < 1048576) {
+            return round($estimatedBytes / 1024, 1) . ' KB';
+        } else {
+            return round($estimatedBytes / 1048576, 1) . ' MB';
         }
     }
 

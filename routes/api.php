@@ -44,6 +44,10 @@ Route::prefix('admin')->group(function () {
     // Jawaban & Hasil Ujian
     Route::get('/jawaban/peserta', [AdminController::class, 'getJawabanPeserta']); // GET /api/admin/jawaban/peserta
     Route::get('/jawaban/peserta/{peserta_id}/ujian/{ujian_id}', [AdminController::class, 'getDetailJawabanPeserta']); // GET /api/admin/jawaban/peserta/{peserta_id}/ujian/{ujian_id}
+    
+    // Export Excel
+    Route::get('/export/info/{id}', [AdminController::class, 'getInfoExportUjian']); // GET /api/admin/export/info/{id}
+    Route::get('/export/hasil-ujian/{id}', [AdminController::class, 'exportHasilUjian']); // GET /api/admin/export/hasil-ujian/{id}
 });
 
 // Peserta routes untuk sistem CBT

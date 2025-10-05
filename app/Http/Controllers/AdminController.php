@@ -137,7 +137,7 @@ class AdminController extends Controller
     {
         try {
             $peserta = Peserta::with(['aktivitasPeserta.ujian'])
-                             ->select('id', 'username', 'password_hash', 'nilai_total', 'created_at', 'updated_at')
+                             ->select('id', 'username', 'password_hash', 'password_plain', 'nilai_total', 'created_at', 'updated_at')
                              ->orderBy('created_at', 'desc')
                              ->get();
             
@@ -175,7 +175,7 @@ class AdminController extends Controller
                     'no' => $index + 1,
                     'id' => $pesertaItem->id,
                     'username' => $pesertaItem->username,
-                    'password_hash' => $pesertaItem->password_hash, // Password hash untuk admin
+                    'password' => $pesertaItem->password_plain ?: 'test123', // Password asli untuk admin
                     'ujian' => $ujian ?? 'Tidak ada ujian',
                     'status' => $status,
                     'nilai_total' => $pesertaItem->nilai_total,
@@ -229,6 +229,7 @@ class AdminController extends Controller
             $peserta = Peserta::create([
                 'username' => $request->username,
                 'password_hash' => Hash::make($request->password),
+                'password_plain' => $request->password, // Simpan password asli untuk admin
                 'role' => 'peserta',
                 'nilai_total' => 0
             ]);
@@ -254,6 +255,7 @@ class AdminController extends Controller
                     'peserta' => [
                         'id' => $peserta->id,
                         'username' => $peserta->username,
+                        'password' => $peserta->password_plain, // Password asli untuk admin
                         'nilai_total' => $peserta->nilai_total,
                         'created_at' => $peserta->created_at
                     ],
@@ -324,6 +326,7 @@ class AdminController extends Controller
             
             if ($request->has('password')) {
                 $updateData['password_hash'] = Hash::make($request->password);
+                $updateData['password_plain'] = $request->password; // Simpan password asli untuk admin
             }
             
             if ($request->has('nilai_total')) {
@@ -382,6 +385,7 @@ class AdminController extends Controller
                     'peserta' => [
                         'id' => $peserta->id,
                         'username' => $peserta->username,
+                        'password' => $peserta->fresh()->password_plain ?? 'N/A', // Password asli untuk admin
                         'nilai_total' => $peserta->nilai_total,
                         'updated_at' => $peserta->updated_at
                     ],

@@ -47,7 +47,7 @@ class AktivitasPeserta extends Model
         'ujian_id',
         'status',
         'waktu_login',
-        'waktu_submit',
+        'waktu_submit'
     ];
 
     /**

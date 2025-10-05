@@ -37,7 +37,6 @@ Route::prefix('admin')->group(function () {
     Route::post('/soal', [AdminController::class, 'createSoal']); // POST /api/admin/soal
     Route::put('/soal/{id}', [AdminController::class, 'updateSoal']); // PUT /api/admin/soal/{id}
     Route::delete('/soal/{id}', [AdminController::class, 'deleteSoal']); // DELETE /api/admin/soal/{id}
-    
 });
 
 // Peserta routes untuk sistem CBT

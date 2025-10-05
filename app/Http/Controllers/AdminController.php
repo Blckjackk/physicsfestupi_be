@@ -54,7 +54,7 @@ class AdminController extends Controller
             $validator = Validator::make($request->all(), [
                 'username' => 'required|string|max:50|unique:peserta,username',
                 'password' => 'required|string|min:6',
-                'nilai_total' => 'nullable|integer|min:0'
+                'ujian_id' => 'required|exists:ujian,id'
             ]);
 
             if ($validator->fails()) {
@@ -67,39 +67,31 @@ class AdminController extends Controller
 
             \DB::beginTransaction();
 
-            // Buat peserta baru
+            // Buat peserta baru dengan nilai_total default 0
             $peserta = Peserta::create([
                 'username' => $request->username,
                 'password_hash' => Hash::make($request->password),
                 'role' => 'peserta',
-                'nilai_total' => $request->nilai_total
+                'nilai_total' => 0
             ]);
 
-            // Otomatis buat aktivitas peserta untuk semua ujian yang ada dengan status belum_login
-            $ujian_list = Ujian::all();
-            $aktivitas_created = [];
+            // Ambil data ujian yang dipilih
+            $ujian = Ujian::find($request->ujian_id);
 
-            foreach ($ujian_list as $ujian) {
-                $aktivitas = AktivitasPeserta::create([
-                    'peserta_id' => $peserta->id,
-                    'ujian_id' => $ujian->id,
-                    'status' => 'belum_login',
-                    'waktu_login' => null,
-                    'waktu_submit' => null
-                ]);
-
-                $aktivitas_created[] = [
-                    'ujian_id' => $ujian->id,
-                    'nama_ujian' => $ujian->nama_ujian,
-                    'status' => 'belum_login'
-                ];
-            }
+            // Buat aktivitas peserta untuk ujian yang dipilih (1 ujian saja)
+            $aktivitas = AktivitasPeserta::create([
+                'peserta_id' => $peserta->id,
+                'ujian_id' => $ujian->id,
+                'status' => 'belum_login',
+                'waktu_login' => null,
+                'waktu_submit' => null
+            ]);
 
             \DB::commit();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Peserta berhasil dibuat dengan status otomatis untuk semua ujian',
+                'message' => 'Peserta berhasil dibuat dan terdaftar ke ujian',
                 'data' => [
                     'peserta' => [
                         'id' => $peserta->id,
@@ -107,8 +99,13 @@ class AdminController extends Controller
                         'nilai_total' => $peserta->nilai_total,
                         'created_at' => $peserta->created_at
                     ],
-                    'total_ujian' => count($aktivitas_created),
-                    'aktivitas_ujian' => $aktivitas_created
+                    'ujian_assigned' => [
+                        'ujian_id' => $ujian->id,
+                        'nama_ujian' => $ujian->nama_ujian,
+                        'status' => 'belum_login',
+                        'waktu_mulai' => $ujian->waktu_mulai,
+                        'waktu_selesai' => $ujian->waktu_selesai
+                    ]
                 ]
             ], 201);
 
@@ -225,6 +222,388 @@ class AdminController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal menghapus peserta',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get detail peserta beserta ujian yang di-assign
+     * 
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function getDetailPeserta(int $id): JsonResponse
+    {
+        try {
+            $peserta = Peserta::with(['aktivitasPeserta.ujian'])->find($id);
+            
+            if (!$peserta) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Peserta tidak ditemukan'
+                ], 404);
+            }
+
+            // Format data ujian yang di-assign
+            $ujianAssigned = $peserta->aktivitasPeserta->map(function ($aktivitas) {
+                return [
+                    'ujian_id' => $aktivitas->ujian->id,
+                    'nama_ujian' => $aktivitas->ujian->nama_ujian,
+                    'deskripsi' => $aktivitas->ujian->deskripsi,
+                    'waktu_mulai' => $aktivitas->ujian->waktu_mulai,
+                    'waktu_selesai' => $aktivitas->ujian->waktu_selesai,
+                    'durasi_menit' => $aktivitas->ujian->durasi_menit,
+                    'status_peserta' => $aktivitas->status,
+                    'waktu_login' => $aktivitas->waktu_login,
+                    'waktu_submit' => $aktivitas->waktu_submit,
+                    'nilai_total' => $aktivitas->nilai_total
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Detail peserta berhasil diambil',
+                'data' => [
+                    'peserta' => [
+                        'id' => $peserta->id,
+                        'username' => $peserta->username,
+                        'created_at' => $peserta->created_at,
+                        'updated_at' => $peserta->updated_at
+                    ],
+                    'ujian_assigned' => $ujianAssigned,
+                    'total_ujian' => $ujianAssigned->count()
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil detail peserta',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Assign ujian ke peserta
+     * 
+     * @param Request $request
+     * @param int $pesertaId
+     * @return JsonResponse
+     */
+    public function assignUjianToPeserta(Request $request, int $pesertaId): JsonResponse
+    {
+        try {
+            // Cari peserta
+            $peserta = Peserta::find($pesertaId);
+            if (!$peserta) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Peserta tidak ditemukan'
+                ], 404);
+            }
+
+            // Validasi input
+            $validator = Validator::make($request->all(), [
+                'ujian_ids' => 'required|array|min:1',
+                'ujian_ids.*' => 'exists:ujian,id'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validasi gagal',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            \DB::beginTransaction();
+
+            $ujian_assigned = [];
+            $ujian_already_exists = [];
+
+            foreach ($request->ujian_ids as $ujianId) {
+                // Cek apakah peserta sudah terdaftar di ujian ini
+                $existingActivity = AktivitasPeserta::where('peserta_id', $pesertaId)
+                                                  ->where('ujian_id', $ujianId)
+                                                  ->first();
+
+                if ($existingActivity) {
+                    $ujian = Ujian::find($ujianId);
+                    $ujian_already_exists[] = [
+                        'ujian_id' => $ujianId,
+                        'nama_ujian' => $ujian->nama_ujian,
+                        'status' => $existingActivity->status
+                    ];
+                } else {
+                    // Buat aktivitas baru
+                    $ujian = Ujian::find($ujianId);
+                    AktivitasPeserta::create([
+                        'peserta_id' => $pesertaId,
+                        'ujian_id' => $ujianId,
+                        'status' => 'belum_login',
+                        'waktu_login' => null,
+                        'waktu_submit' => null
+                    ]);
+
+                    $ujian_assigned[] = [
+                        'ujian_id' => $ujianId,
+                        'nama_ujian' => $ujian->nama_ujian,
+                        'status' => 'belum_login'
+                    ];
+                }
+            }
+
+            \DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Proses assign ujian selesai',
+                'data' => [
+                    'peserta' => [
+                        'id' => $peserta->id,
+                        'username' => $peserta->username
+                    ],
+                    'ujian_berhasil_diassign' => $ujian_assigned,
+                    'ujian_sudah_terdaftar' => $ujian_already_exists,
+                    'total_berhasil' => count($ujian_assigned),
+                    'total_sudah_ada' => count($ujian_already_exists)
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal assign ujian ke peserta',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Unassign ujian dari peserta
+     * 
+     * @param int $pesertaId
+     * @param int $ujianId
+     * @return JsonResponse
+     */
+    public function unassignUjianFromPeserta(int $pesertaId, int $ujianId): JsonResponse
+    {
+        try {
+            // Cari peserta dan ujian
+            $peserta = Peserta::find($pesertaId);
+            $ujian = Ujian::find($ujianId);
+
+            if (!$peserta) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Peserta tidak ditemukan'
+                ], 404);
+            }
+
+            if (!$ujian) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ujian tidak ditemukan'
+                ], 404);
+            }
+
+            // Cari aktivitas peserta
+            $aktivitas = AktivitasPeserta::where('peserta_id', $pesertaId)
+                                        ->where('ujian_id', $ujianId)
+                                        ->first();
+
+            if (!$aktivitas) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Peserta tidak terdaftar di ujian ini'
+                ], 404);
+            }
+
+            // Cek apakah peserta sudah mengerjakan ujian
+            if ($aktivitas->status !== 'belum_login') {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Tidak dapat menghapus assignment. Peserta sudah {$aktivitas->status} untuk ujian ini."
+                ], 422);
+            }
+
+            // Hapus aktivitas (juga akan menghapus jawaban jika ada karena foreign key cascade)
+            $aktivitas->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Peserta berhasil dihapus dari ujian',
+                'data' => [
+                    'peserta' => [
+                        'id' => $peserta->id,
+                        'username' => $peserta->username
+                    ],
+                    'ujian' => [
+                        'id' => $ujian->id,
+                        'nama_ujian' => $ujian->nama_ujian
+                    ]
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal unassign ujian dari peserta',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // ====== LAPORAN & MONITORING ======
+
+    /**
+     * Laporan hasil ujian per ujian
+     * 
+     * @param int $ujianId
+     * @return JsonResponse
+     */
+    public function getLaporanUjian(int $ujianId): JsonResponse
+    {
+        try {
+            $ujian = Ujian::with(['aktivitasPeserta.peserta'])->find($ujianId);
+            
+            if (!$ujian) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ujian tidak ditemukan'
+                ], 404);
+            }
+
+            // Format data laporan
+            $hasilPeserta = $ujian->aktivitasPeserta->map(function ($aktivitas) {
+                return [
+                    'peserta_id' => $aktivitas->peserta->id,
+                    'username' => $aktivitas->peserta->username,
+                    'status' => $aktivitas->status,
+                    'waktu_login' => $aktivitas->waktu_login,
+                    'waktu_submit' => $aktivitas->waktu_submit,
+                    'nilai_total' => $aktivitas->nilai_total,
+                    'durasi_pengerjaan' => $aktivitas->waktu_login && $aktivitas->waktu_submit 
+                        ? \Carbon\Carbon::parse($aktivitas->waktu_submit)->diffInMinutes($aktivitas->waktu_login) . ' menit'
+                        : null
+                ];
+            });
+
+            // Statistik
+            $totalPeserta = $hasilPeserta->count();
+            $sudahSubmit = $hasilPeserta->where('status', 'selesai')->count();
+            $sedangMengerjakan = $hasilPeserta->where('status', 'sedang_ujian')->count();
+            $belumLogin = $hasilPeserta->where('status', 'belum_login')->count();
+            
+            $nilaiTertinggi = $hasilPeserta->where('nilai_total', '>', 0)->max('nilai_total') ?? 0;
+            $nilaiTerendah = $hasilPeserta->where('nilai_total', '>', 0)->min('nilai_total') ?? 0;
+            $rataRata = $hasilPeserta->where('nilai_total', '>', 0)->avg('nilai_total') ?? 0;
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Laporan ujian berhasil diambil',
+                'data' => [
+                    'ujian' => [
+                        'id' => $ujian->id,
+                        'nama_ujian' => $ujian->nama_ujian,
+                        'deskripsi' => $ujian->deskripsi,
+                        'waktu_mulai' => $ujian->waktu_mulai,
+                        'waktu_selesai' => $ujian->waktu_selesai,
+                        'durasi_menit' => $ujian->durasi_menit
+                    ],
+                    'statistik' => [
+                        'total_peserta' => $totalPeserta,
+                        'sudah_submit' => $sudahSubmit,
+                        'sedang_mengerjakan' => $sedangMengerjakan,
+                        'belum_login' => $belumLogin,
+                        'persentase_kehadiran' => $totalPeserta > 0 ? round(($sudahSubmit + $sedangMengerjakan) / $totalPeserta * 100, 2) : 0
+                    ],
+                    'nilai' => [
+                        'tertinggi' => round($nilaiTertinggi, 2),
+                        'terendah' => round($nilaiTerendah, 2),
+                        'rata_rata' => round($rataRata, 2)
+                    ],
+                    'hasil_peserta' => $hasilPeserta
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil laporan ujian',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Monitoring status ujian real-time
+     * 
+     * @return JsonResponse
+     */
+    public function getMonitoringUjian(): JsonResponse
+    {
+        try {
+            // Ambil ujian yang sedang berlangsung atau akan dimulai hari ini
+            $today = \Carbon\Carbon::today();
+            $now = \Carbon\Carbon::now();
+
+            $ujianAktif = Ujian::with(['aktivitasPeserta.peserta'])
+                ->whereDate('waktu_mulai', '>=', $today)
+                ->orWhere(function($query) use ($now) {
+                    $query->where('waktu_mulai', '<=', $now)
+                          ->where('waktu_selesai', '>=', $now);
+                })
+                ->get();
+
+            $monitoring = $ujianAktif->map(function ($ujian) use ($now) {
+                $statusUjian = 'belum_dimulai';
+                if ($now->gte(\Carbon\Carbon::parse($ujian->waktu_mulai)) && $now->lte(\Carbon\Carbon::parse($ujian->waktu_selesai))) {
+                    $statusUjian = 'sedang_berlangsung';
+                } elseif ($now->gt(\Carbon\Carbon::parse($ujian->waktu_selesai))) {
+                    $statusUjian = 'selesai';
+                }
+
+                $totalPeserta = $ujian->aktivitasPeserta->count();
+                $sudahLogin = $ujian->aktivitasPeserta->whereIn('status', ['sedang_ujian', 'selesai'])->count();
+                $sedangMengerjakan = $ujian->aktivitasPeserta->where('status', 'sedang_ujian')->count();
+                $sudahSelesai = $ujian->aktivitasPeserta->where('status', 'selesai')->count();
+
+                return [
+                    'ujian_id' => $ujian->id,
+                    'nama_ujian' => $ujian->nama_ujian,
+                    'waktu_mulai' => $ujian->waktu_mulai,
+                    'waktu_selesai' => $ujian->waktu_selesai,
+                    'status_ujian' => $statusUjian,
+                    'sisa_waktu' => $statusUjian === 'sedang_berlangsung' 
+                        ? \Carbon\Carbon::parse($ujian->waktu_selesai)->diffInMinutes($now) . ' menit'
+                        : null,
+                    'statistik_peserta' => [
+                        'total' => $totalPeserta,
+                        'sudah_login' => $sudahLogin,
+                        'sedang_mengerjakan' => $sedangMengerjakan,
+                        'sudah_selesai' => $sudahSelesai,
+                        'belum_login' => $totalPeserta - $sudahLogin
+                    ]
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Data monitoring berhasil diambil',
+                'data' => [
+                    'timestamp' => $now,
+                    'ujian_monitoring' => $monitoring
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil data monitoring',
                 'error' => $e->getMessage()
             ], 500);
         }

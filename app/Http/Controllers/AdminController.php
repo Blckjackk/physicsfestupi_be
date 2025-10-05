@@ -99,6 +99,7 @@ class AdminController extends Controller
             $totalPeserta = Peserta::count();
             
             // Count peserta berdasarkan status aktivitas
+            $belumLogin = AktivitasPeserta::where('status', 'belum_login')->distinct('peserta_id')->count('peserta_id');
             $belumMulai = AktivitasPeserta::where('status', 'belum_mulai')->distinct('peserta_id')->count('peserta_id');
             $sedangMengerjakan = AktivitasPeserta::where('status', 'sedang_mengerjakan')->distinct('peserta_id')->count('peserta_id');
             $sudahSubmit = AktivitasPeserta::where('status', 'sudah_submit')->distinct('peserta_id')->count('peserta_id');
@@ -108,6 +109,7 @@ class AdminController extends Controller
                 'message' => 'Data dashboard berhasil diambil',
                 'data' => [
                     'peserta_ujian' => $totalPeserta,
+                    'belum_login' => $belumLogin,
                     'belum_mulai' => $belumMulai,
                     'sedang_mengerjakan' => $sedangMengerjakan,
                     'sudah_submit' => $sudahSubmit,
@@ -155,14 +157,17 @@ class AdminController extends Controller
                         case 'belum_login':
                             $status = 'Belum Login';
                             break;
+                        case 'belum_mulai':
+                            $status = 'Belum Mulai';
+                            break;
                         case 'sedang_mengerjakan':
                             $status = 'Sedang Ujian';
                             break;
-                        case 'selesai':
-                            $status = 'Selesai';
+                        case 'sudah_submit':
+                            $status = 'Sudah Submit';
                             break;
                         default:
-                            $status = 'Belum Mulai';
+                            $status = 'Belum Login';
                     }
                 }
                 
@@ -531,8 +536,9 @@ class AdminController extends Controller
 
             // Statistik
             $totalPeserta = $hasilPeserta->count();
-            $sudahSubmit = $hasilPeserta->where('status', 'selesai')->count();
-            $sedangMengerjakan = $hasilPeserta->where('status', 'sedang_ujian')->count();
+            $sudahSubmit = $hasilPeserta->where('status', 'sudah_submit')->count();
+            $sedangMengerjakan = $hasilPeserta->where('status', 'sedang_mengerjakan')->count();
+            $belumMulai = $hasilPeserta->where('status', 'belum_mulai')->count();
             $belumLogin = $hasilPeserta->where('status', 'belum_login')->count();
             
             $nilaiTertinggi = $hasilPeserta->where('nilai_total', '>', 0)->max('nilai_total') ?? 0;
@@ -555,6 +561,7 @@ class AdminController extends Controller
                         'total_peserta' => $totalPeserta,
                         'sudah_submit' => $sudahSubmit,
                         'sedang_mengerjakan' => $sedangMengerjakan,
+                        'belum_mulai' => $belumMulai,
                         'belum_login' => $belumLogin,
                         'persentase_kehadiran' => $totalPeserta > 0 ? round(($sudahSubmit + $sedangMengerjakan) / $totalPeserta * 100, 2) : 0
                     ],
@@ -605,9 +612,9 @@ class AdminController extends Controller
                 }
 
                 $totalPeserta = $ujian->aktivitasPeserta->count();
-                $sudahLogin = $ujian->aktivitasPeserta->whereIn('status', ['sedang_ujian', 'selesai'])->count();
-                $sedangMengerjakan = $ujian->aktivitasPeserta->where('status', 'sedang_ujian')->count();
-                $sudahSelesai = $ujian->aktivitasPeserta->where('status', 'selesai')->count();
+                $sudahLogin = $ujian->aktivitasPeserta->whereIn('status', ['sedang_mengerjakan', 'sudah_submit'])->count();
+                $sedangMengerjakan = $ujian->aktivitasPeserta->where('status', 'sedang_mengerjakan')->count();
+                $sudahSelesai = $ujian->aktivitasPeserta->where('status', 'sudah_submit')->count();
 
                 return [
                     'ujian_id' => $ujian->id,

@@ -41,7 +41,7 @@ class HasilUjianExport implements FromCollection, WithHeadings, WithMapping, Wit
         // Ambil semua aktivitas peserta untuk ujian ini yang sudah login
         return AktivitasPeserta::with(['peserta', 'ujian'])
             ->where('ujian_id', $this->ujianId)
-            ->whereIn('status', ['sedang_mengerjakan', 'selesai'])
+            ->whereIn('status', ['sedang_mengerjakan', 'sudah_submit'])
             ->orderBy('created_at', 'asc')
             ->get();
     }
@@ -275,10 +275,12 @@ class HasilUjianExport implements FromCollection, WithHeadings, WithMapping, Wit
         switch ($status) {
             case 'belum_login':
                 return 'Belum Login';
+            case 'belum_mulai':
+                return 'Belum Mulai';
             case 'sedang_mengerjakan':
                 return 'Sedang Ujian';
-            case 'selesai':
-                return 'Selesai';
+            case 'sudah_submit':
+                return 'Sudah Submit';
             default:
                 return 'Unknown';
         }

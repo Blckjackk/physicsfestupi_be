@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('peserta_id')->constrained('peserta')->onDelete('cascade');
             $table->foreignId('ujian_id')->constrained('ujian')->onDelete('cascade');
-            $table->enum('status', ['belum_login', 'sedang_mengerjakan', 'sudah_submit'])->default('belum_login');
+            $table->enum('status', ['belum_login', 'belum_mulai', 'sedang_mengerjakan', 'sudah_submit'])->default('belum_login');
             $table->datetime('waktu_login')->nullable();
             $table->datetime('waktu_submit')->nullable();
             $table->timestamps();

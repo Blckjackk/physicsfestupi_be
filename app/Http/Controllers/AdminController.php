@@ -14,6 +14,77 @@ use Illuminate\Support\Facades\Validator;
 
 class AdminController extends Controller
 {
+    // ====== AUTHENTICATION ======
+
+    /**
+     * Login admin
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function loginAdmin(Request $request): JsonResponse
+    {
+        try {
+            // Validasi input
+            $validator = Validator::make($request->all(), [
+                'username' => 'required|string',
+                'password' => 'required|string'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validasi gagal',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // Cari admin berdasarkan username
+            $admin = Admin::where('username', $request->username)->first();
+
+            if (!$admin) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Username tidak ditemukan'
+                ], 404);
+            }
+
+            // Verifikasi password
+            if (!Hash::check($request->password, $admin->password_hash)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Password salah'
+                ], 401);
+            }
+
+            // Generate token jika menggunakan Sanctum (optional)
+            // $token = $admin->createToken('admin-token')->plainTextToken;
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Login berhasil',
+                'data' => [
+                    'admin' => [
+                        'id' => $admin->id,
+                        'username' => $admin->username,
+                        'role' => $admin->role
+                    ],
+                    // 'token' => $token, // uncomment jika menggunakan Sanctum
+                    'login_time' => now()
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal login',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // ====== PESERTA MANAGEMENT ======
+
     /**
      * Ambil daftar semua peserta
      * 

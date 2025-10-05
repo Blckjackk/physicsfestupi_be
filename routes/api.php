@@ -20,6 +20,9 @@ Route::get('/test', function () {
 
 // Admin routes untuk mengelola sistem CBT
 Route::prefix('admin')->group(function () {
+    // Authentication
+    Route::post('/login', [AdminController::class, 'loginAdmin']); // POST /api/admin/login
+    
     // CRUD Peserta
     Route::get('/peserta', [AdminController::class, 'getPeserta']); // GET /api/admin/peserta
     Route::post('/peserta', [AdminController::class, 'createPeserta']); // POST /api/admin/peserta

@@ -86,21 +86,63 @@ class AdminController extends Controller
     // ====== PESERTA MANAGEMENT ======
 
     /**
-     * Ambil daftar semua peserta
+     * Ambil daftar semua peserta dengan status dan ujian yang diambil
      * 
      * @return JsonResponse
      */
     public function getPeserta(): JsonResponse
     {
         try {
-            $peserta = Peserta::select('id', 'username', 'nilai_total', 'created_at', 'updated_at')
+            $peserta = Peserta::with(['aktivitasPeserta.ujian'])
+                             ->select('id', 'username', 'nilai_total', 'created_at', 'updated_at')
                              ->orderBy('created_at', 'desc')
                              ->get();
+            
+            // Format data peserta dengan informasi ujian dan status
+            $pesertaData = $peserta->map(function ($pesertaItem, $index) {
+                // Ambil aktivitas peserta pertama (karena 1 peserta hanya bisa 1 ujian)
+                $aktivitas = $pesertaItem->aktivitasPeserta->first();
+                
+                // Tentukan status berdasarkan aktivitas
+                $status = 'Belum Login';
+                $ujian = null;
+                $password = 'test123'; // Default password untuk tampilan
+                
+                if ($aktivitas) {
+                    $ujian = $aktivitas->ujian->nama_ujian;
+                    
+                    switch ($aktivitas->status) {
+                        case 'belum_login':
+                            $status = 'Belum Login';
+                            break;
+                        case 'sedang_mengerjakan':
+                            $status = 'Sedang Ujian';
+                            break;
+                        case 'selesai':
+                            $status = 'Selesai';
+                            break;
+                        default:
+                            $status = 'Belum Mulai';
+                    }
+                }
+                
+                return [
+                    'no' => $index + 1,
+                    'id' => $pesertaItem->id,
+                    'username' => $pesertaItem->username,
+                    'password' => $password, // Untuk tampilan saja
+                    'ujian' => $ujian ?? 'Tidak ada ujian',
+                    'status' => $status,
+                    'nilai_total' => $pesertaItem->nilai_total,
+                    'created_at' => $pesertaItem->created_at,
+                    'updated_at' => $pesertaItem->updated_at
+                ];
+            });
             
             return response()->json([
                 'success' => true,
                 'message' => 'Daftar peserta berhasil diambil',
-                'data' => $peserta
+                'data' => $pesertaData
             ], 200);
             
         } catch (\Exception $e) {

@@ -96,7 +96,7 @@ class AdminController extends Controller
     {
         try {
             $peserta = Peserta::with(['aktivitasPeserta.ujian'])
-                             ->select('id', 'username', 'nilai_total', 'created_at', 'updated_at')
+                             ->select('id', 'username', 'password_hash', 'nilai_total', 'created_at', 'updated_at')
                              ->orderBy('created_at', 'desc')
                              ->get();
             
@@ -108,7 +108,6 @@ class AdminController extends Controller
                 // Tentukan status berdasarkan aktivitas
                 $status = 'Belum Login';
                 $ujian = null;
-                $password = 'test123'; // Default password untuk tampilan
                 
                 if ($aktivitas) {
                     $ujian = $aktivitas->ujian->nama_ujian;
@@ -132,7 +131,7 @@ class AdminController extends Controller
                     'no' => $index + 1,
                     'id' => $pesertaItem->id,
                     'username' => $pesertaItem->username,
-                    'password' => $password, // Untuk tampilan saja
+                    'password_hash' => $pesertaItem->password_hash, // Password hash untuk admin
                     'ujian' => $ujian ?? 'Tidak ada ujian',
                     'status' => $status,
                     'nilai_total' => $pesertaItem->nilai_total,
@@ -258,7 +257,8 @@ class AdminController extends Controller
             $validator = Validator::make($request->all(), [
                 'username' => 'sometimes|required|string|max:50|unique:peserta,username,' . $id,
                 'password' => 'sometimes|required|string|min:6',
-                'nilai_total' => 'nullable|integer|min:0'
+                'nilai_total' => 'nullable|integer|min:0',
+                'ujian_id' => 'sometimes|required|exists:ujian,id'
             ]);
 
             if ($validator->fails()) {
@@ -269,7 +269,9 @@ class AdminController extends Controller
                 ], 422);
             }
 
-            // Update data
+            \DB::beginTransaction();
+
+            // Update data peserta
             $updateData = [];
             
             if ($request->has('username')) {
@@ -286,18 +288,71 @@ class AdminController extends Controller
 
             $peserta->update($updateData);
 
+            // Update ujian assignment jika ada
+            $ujianAssigned = null;
+            if ($request->has('ujian_id')) {
+                // Hapus aktivitas peserta yang lama
+                AktivitasPeserta::where('peserta_id', $peserta->id)->delete();
+
+                // Ambil data ujian yang baru dipilih
+                $ujian = Ujian::find($request->ujian_id);
+
+                // Buat aktivitas peserta baru untuk ujian yang dipilih
+                $aktivitas = AktivitasPeserta::create([
+                    'peserta_id' => $peserta->id,
+                    'ujian_id' => $ujian->id,
+                    'status' => 'belum_login',
+                    'waktu_login' => null,
+                    'waktu_submit' => null
+                ]);
+
+                $ujianAssigned = [
+                    'ujian_id' => $ujian->id,
+                    'nama_ujian' => $ujian->nama_ujian,
+                    'status' => 'belum_login',
+                    'waktu_mulai_pengerjaan' => $ujian->waktu_mulai_pengerjaan,
+                    'waktu_akhir_pengerjaan' => $ujian->waktu_akhir_pengerjaan
+                ];
+            }
+
+            \DB::commit();
+
+            // Ambil data ujian saat ini jika tidak diupdate
+            if (!$ujianAssigned) {
+                $aktivitasSekarang = AktivitasPeserta::with('ujian')->where('peserta_id', $peserta->id)->first();
+                if ($aktivitasSekarang) {
+                    $ujianAssigned = [
+                        'ujian_id' => $aktivitasSekarang->ujian->id,
+                        'nama_ujian' => $aktivitasSekarang->ujian->nama_ujian,
+                        'status' => $aktivitasSekarang->status,
+                        'waktu_mulai_pengerjaan' => $aktivitasSekarang->ujian->waktu_mulai_pengerjaan,
+                        'waktu_akhir_pengerjaan' => $aktivitasSekarang->ujian->waktu_akhir_pengerjaan
+                    ];
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Peserta berhasil diupdate',
                 'data' => [
-                    'id' => $peserta->id,
-                    'username' => $peserta->username,
-                    'nilai_total' => $peserta->nilai_total,
-                    'updated_at' => $peserta->updated_at
+                    'peserta' => [
+                        'id' => $peserta->id,
+                        'username' => $peserta->username,
+                        'nilai_total' => $peserta->nilai_total,
+                        'updated_at' => $peserta->updated_at
+                    ],
+                    'ujian_assigned' => $ujianAssigned,
+                    'changes' => [
+                        'username_changed' => $request->has('username'),
+                        'password_changed' => $request->has('password'),
+                        'nilai_total_changed' => $request->has('nilai_total'),
+                        'ujian_changed' => $request->has('ujian_id')
+                    ]
                 ]
             ], 200);
 
         } catch (\Exception $e) {
+            \DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal mengupdate peserta',

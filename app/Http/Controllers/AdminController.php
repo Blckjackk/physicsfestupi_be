@@ -446,6 +446,71 @@ class AdminController extends Controller
     }
 
     /**
+     * Hapus peserta secara batch (multiple selection)
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function batchDeletePeserta(Request $request): JsonResponse
+    {
+        try {
+            // Validasi input
+            $validator = Validator::make($request->all(), [
+                'peserta_ids' => 'required|array|min:1',
+                'peserta_ids.*' => 'required|integer|exists:peserta,id'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validasi gagal',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $pesertaIds = $request->peserta_ids;
+            $deletedCount = 0;
+            $errors = [];
+
+            \DB::beginTransaction();
+
+            foreach ($pesertaIds as $id) {
+                try {
+                    $peserta = Peserta::find($id);
+                    if ($peserta) {
+                        $peserta->delete(); // Cascade akan menghapus aktivitas dan jawaban
+                        $deletedCount++;
+                    } else {
+                        $errors[] = "Peserta dengan ID {$id} tidak ditemukan";
+                    }
+                } catch (\Exception $e) {
+                    $errors[] = "Gagal menghapus peserta ID {$id}: " . $e->getMessage();
+                }
+            }
+
+            \DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Berhasil menghapus {$deletedCount} peserta",
+                'data' => [
+                    'deleted_count' => $deletedCount,
+                    'total_requested' => count($pesertaIds),
+                    'errors' => $errors
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menghapus peserta secara batch',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get detail peserta beserta ujian yang di-assign
      * 
      * @param int $id
@@ -1243,6 +1308,169 @@ class AdminController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal mengambil info export',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Hapus hasil ujian peserta (single)
+     * 
+     * @param int $pesertaId
+     * @param int $ujianId
+     * @return JsonResponse
+     */
+    public function deleteHasilUjianPeserta(int $pesertaId, int $ujianId): JsonResponse
+    {
+        try {
+            // Validasi peserta dan ujian
+            $peserta = Peserta::find($pesertaId);
+            $ujian = Ujian::find($ujianId);
+            
+            if (!$peserta) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Peserta tidak ditemukan'
+                ], 404);
+            }
+
+            if (!$ujian) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ujian tidak ditemukan'
+                ], 404);
+            }
+
+            \DB::beginTransaction();
+
+            // Hapus semua jawaban peserta untuk ujian ini
+            $deletedJawaban = Jawaban::where('peserta_id', $pesertaId)
+                                   ->where('ujian_id', $ujianId)
+                                   ->delete();
+
+            // Hapus aktivitas peserta untuk ujian ini
+            $deletedAktivitas = AktivitasPeserta::where('peserta_id', $pesertaId)
+                                              ->where('ujian_id', $ujianId)
+                                              ->delete();
+
+            \DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Hasil ujian peserta berhasil dihapus',
+                'data' => [
+                    'peserta' => [
+                        'id' => $peserta->id,
+                        'username' => $peserta->username
+                    ],
+                    'ujian' => [
+                        'id' => $ujian->id,
+                        'nama_ujian' => $ujian->nama_ujian
+                    ],
+                    'deleted_jawaban' => $deletedJawaban,
+                    'deleted_aktivitas' => $deletedAktivitas
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menghapus hasil ujian peserta',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Hapus hasil ujian secara batch (multiple selection)
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function batchDeleteHasilUjian(Request $request): JsonResponse
+    {
+        try {
+            // Validasi input
+            $validator = Validator::make($request->all(), [
+                'hasil_ujian' => 'required|array|min:1',
+                'hasil_ujian.*.peserta_id' => 'required|integer|exists:peserta,id',
+                'hasil_ujian.*.ujian_id' => 'required|integer|exists:ujian,id'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validasi gagal',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $hasilUjian = $request->hasil_ujian;
+            $deletedCount = 0;
+            $totalJawaban = 0;
+            $totalAktivitas = 0;
+            $errors = [];
+
+            \DB::beginTransaction();
+
+            foreach ($hasilUjian as $index => $hasil) {
+                try {
+                    $pesertaId = $hasil['peserta_id'];
+                    $ujianId = $hasil['ujian_id'];
+
+                    // Cek apakah peserta dan ujian exists
+                    $peserta = Peserta::find($pesertaId);
+                    $ujian = Ujian::find($ujianId);
+
+                    if (!$peserta) {
+                        $errors[] = "Peserta dengan ID {$pesertaId} tidak ditemukan";
+                        continue;
+                    }
+
+                    if (!$ujian) {
+                        $errors[] = "Ujian dengan ID {$ujianId} tidak ditemukan";
+                        continue;
+                    }
+
+                    // Hapus jawaban
+                    $deletedJawaban = Jawaban::where('peserta_id', $pesertaId)
+                                            ->where('ujian_id', $ujianId)
+                                            ->delete();
+
+                    // Hapus aktivitas
+                    $deletedAktivitas = AktivitasPeserta::where('peserta_id', $pesertaId)
+                                                      ->where('ujian_id', $ujianId)
+                                                      ->delete();
+
+                    $totalJawaban += $deletedJawaban;
+                    $totalAktivitas += $deletedAktivitas;
+                    $deletedCount++;
+
+                } catch (\Exception $e) {
+                    $errors[] = "Gagal menghapus hasil ujian index {$index}: " . $e->getMessage();
+                }
+            }
+
+            \DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Berhasil menghapus {$deletedCount} hasil ujian",
+                'data' => [
+                    'deleted_count' => $deletedCount,
+                    'total_requested' => count($hasilUjian),
+                    'total_jawaban_deleted' => $totalJawaban,
+                    'total_aktivitas_deleted' => $totalAktivitas,
+                    'errors' => $errors
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menghapus hasil ujian secara batch',
                 'error' => $e->getMessage()
             ], 500);
         }

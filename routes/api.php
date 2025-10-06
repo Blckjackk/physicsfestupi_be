@@ -31,6 +31,7 @@ Route::prefix('admin')->group(function () {
     Route::post('/peserta', [AdminController::class, 'createPeserta']); // POST /api/admin/peserta
     Route::put('/peserta/{id}', [AdminController::class, 'updatePeserta']); // PUT /api/admin/peserta/{id}
     Route::delete('/peserta/{id}', [AdminController::class, 'deletePeserta']); // DELETE /api/admin/peserta/{id}
+    Route::post('/peserta/batch-delete', [AdminController::class, 'batchDeletePeserta']); // POST /api/admin/peserta/batch-delete
     
     // CRUD Ujian
     Route::get('/ujian', [AdminController::class, 'getUjian']); // GET /api/admin/ujian
@@ -47,6 +48,8 @@ Route::prefix('admin')->group(function () {
     // Jawaban & Hasil Ujian
     Route::get('/jawaban/peserta', [AdminController::class, 'getJawabanPeserta']); // GET /api/admin/jawaban/peserta
     Route::get('/jawaban/peserta/{peserta_id}/ujian/{ujian_id}', [AdminController::class, 'getDetailJawabanPeserta']); // GET /api/admin/jawaban/peserta/{peserta_id}/ujian/{ujian_id}
+    Route::delete('/hasil-ujian/{peserta_id}/{ujian_id}', [AdminController::class, 'deleteHasilUjianPeserta']); // DELETE /api/admin/hasil-ujian/{peserta_id}/{ujian_id}
+    Route::post('/hasil-ujian/batch-delete', [AdminController::class, 'batchDeleteHasilUjian']); // POST /api/admin/hasil-ujian/batch-delete
     
     // Export Excel
     Route::get('/export/info/{id}', [AdminController::class, 'getInfoExportUjian']); // GET /api/admin/export/info/{id}

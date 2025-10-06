@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Admin;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use App\Models\Peserta;
@@ -17,6 +18,12 @@ class PesertaSeeder extends Seeder
      */
     public function run(): void
     {
+        // buat admin dummy
+        Admin ::create([
+            'username' => 'admin',
+            'password_hash' => Hash::make('admin123'),
+            'role' => 'superadmin'
+        ]);
         // Buat peserta dummy
         $peserta = [
             [
@@ -37,6 +44,7 @@ class PesertaSeeder extends Seeder
                 'role' => 'peserta',
                 'nilai_total' => null
             ]
+            
         ];
 
         foreach ($peserta as $p) {

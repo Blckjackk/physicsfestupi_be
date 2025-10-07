@@ -8,6 +8,7 @@ use App\Models\Soal;
 use App\Models\AktivitasPeserta;
 use App\Models\Jawaban;
 use App\Exports\HasilUjianExport;
+use App\Exports\SemuaHasilUjianExport;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Hash;
@@ -1551,17 +1552,17 @@ class AdminController extends Controller
                 'tipe_soal' => 'required|in:text,gambar',
                 'deskripsi_soal' => 'nullable|string',
                 'pertanyaan' => 'required|string',
-                'media_soal' => 'nullable|string|max:255',
+                'media_soal' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
                 'opsi_a' => 'nullable|string',
-                'opsi_a_media' => 'nullable|string|max:255',
+                'opsi_a_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
                 'opsi_b' => 'nullable|string',
-                'opsi_b_media' => 'nullable|string|max:255',
+                'opsi_b_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
                 'opsi_c' => 'nullable|string',
-                'opsi_c_media' => 'nullable|string|max:255',
+                'opsi_c_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
                 'opsi_d' => 'nullable|string',
-                'opsi_d_media' => 'nullable|string|max:255',
+                'opsi_d_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
                 'opsi_e' => 'nullable|string',
-                'opsi_e_media' => 'nullable|string|max:255',
+                'opsi_e_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
                 'jawaban_benar' => 'required|in:a,b,c,d,e,A,B,C,D,E'
             ]);
 
@@ -1585,26 +1586,46 @@ class AdminController extends Controller
                 ], 422);
             }
 
+            // Pastikan direktori upload ada
+            $this->ensureUploadDirectories();
+
+            // Handle image uploads
+            $mediaData = [];
+            
+            // Upload media soal jika ada
+            if ($request->hasFile('media_soal')) {
+                $file = $request->file('media_soal');
+                $filename = 'soal_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                $file->move(public_path('uploads/soal/media'), $filename);
+                $mediaData['media_soal'] = 'uploads/soal/media/' . $filename;
+            }
+            
+            // Upload media opsi jika ada
+            $options = ['a', 'b', 'c', 'd', 'e'];
+            foreach ($options as $option) {
+                $fieldName = 'opsi_' . $option . '_media';
+                if ($request->hasFile($fieldName)) {
+                    $file = $request->file($fieldName);
+                    $filename = 'opsi_' . $option . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                    $file->move(public_path('uploads/soal/opsi'), $filename);
+                    $mediaData[$fieldName] = 'uploads/soal/opsi/' . $filename;
+                }
+            }
+
             // Buat soal baru
-            $soal = Soal::create([
+            $soal = Soal::create(array_merge([
                 'ujian_id' => $request->ujian_id,
                 'nomor_soal' => $request->nomor_soal,
                 'tipe_soal' => $request->tipe_soal,
                 'deskripsi_soal' => $request->deskripsi_soal,
                 'pertanyaan' => $request->pertanyaan,
-                'media_soal' => $request->media_soal,
                 'opsi_a' => $request->opsi_a,
-                'opsi_a_media' => $request->opsi_a_media,
                 'opsi_b' => $request->opsi_b,
-                'opsi_b_media' => $request->opsi_b_media,
                 'opsi_c' => $request->opsi_c,
-                'opsi_c_media' => $request->opsi_c_media,
                 'opsi_d' => $request->opsi_d,
-                'opsi_d_media' => $request->opsi_d_media,
                 'opsi_e' => $request->opsi_e,
-                'opsi_e_media' => $request->opsi_e_media,
                 'jawaban_benar' => strtolower($request->jawaban_benar)
-            ]);
+            ], $mediaData));
 
             return response()->json([
                 'success' => true,
@@ -1647,17 +1668,17 @@ class AdminController extends Controller
                 'tipe_soal' => 'sometimes|required|in:text,gambar',
                 'deskripsi_soal' => 'nullable|string',
                 'pertanyaan' => 'sometimes|required|string',
-                'media_soal' => 'nullable|string|max:255',
+                'media_soal' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
                 'opsi_a' => 'nullable|string',
-                'opsi_a_media' => 'nullable|string|max:255',
+                'opsi_a_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
                 'opsi_b' => 'nullable|string',
-                'opsi_b_media' => 'nullable|string|max:255',
+                'opsi_b_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
                 'opsi_c' => 'nullable|string',
-                'opsi_c_media' => 'nullable|string|max:255',
+                'opsi_c_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
                 'opsi_d' => 'nullable|string',
-                'opsi_d_media' => 'nullable|string|max:255',
+                'opsi_d_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
                 'opsi_e' => 'nullable|string',
-                'opsi_e_media' => 'nullable|string|max:255',
+                'opsi_e_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
                 'jawaban_benar' => 'sometimes|required|in:a,b,c,d,e,A,B,C,D,E'
             ]);
 
@@ -1686,13 +1707,47 @@ class AdminController extends Controller
 
             // Update data
             $updateData = $request->only([
-                'nomor_soal', 'tipe_soal', 'deskripsi_soal', 'pertanyaan', 'media_soal',
-                'opsi_a', 'opsi_a_media', 'opsi_b', 'opsi_b_media', 'opsi_c', 'opsi_c_media',
-                'opsi_d', 'opsi_d_media', 'opsi_e', 'opsi_e_media'
+                'nomor_soal', 'tipe_soal', 'deskripsi_soal', 'pertanyaan',
+                'opsi_a', 'opsi_b', 'opsi_c', 'opsi_d', 'opsi_e'
             ]);
 
             if ($request->has('jawaban_benar')) {
                 $updateData['jawaban_benar'] = strtolower($request->jawaban_benar);
+            }
+
+            // Pastikan direktori upload ada
+            $this->ensureUploadDirectories();
+            
+            // Handle image uploads untuk update
+            // Upload media soal jika ada file baru
+            if ($request->hasFile('media_soal')) {
+                // Hapus file lama jika ada
+                if ($soal->media_soal && file_exists(public_path($soal->media_soal))) {
+                    unlink(public_path($soal->media_soal));
+                }
+                
+                $file = $request->file('media_soal');
+                $filename = 'soal_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                $file->move(public_path('uploads/soal/media'), $filename);
+                $updateData['media_soal'] = 'uploads/soal/media/' . $filename;
+            }
+            
+            // Upload media opsi jika ada file baru
+            $options = ['a', 'b', 'c', 'd', 'e'];
+            foreach ($options as $option) {
+                $fieldName = 'opsi_' . $option . '_media';
+                if ($request->hasFile($fieldName)) {
+                    // Hapus file lama jika ada
+                    $oldField = $soal->{$fieldName};
+                    if ($oldField && file_exists(public_path($oldField))) {
+                        unlink(public_path($oldField));
+                    }
+                    
+                    $file = $request->file($fieldName);
+                    $filename = 'opsi_' . $option . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                    $file->move(public_path('uploads/soal/opsi'), $filename);
+                    $updateData[$fieldName] = 'uploads/soal/opsi/' . $filename;
+                }
             }
 
             $soal->update($updateData);
@@ -1731,6 +1786,9 @@ class AdminController extends Controller
                 ], 404);
             }
 
+            // Hapus file media yang terkait dengan soal
+            $this->deleteMediaFiles($soal);
+
             // Hapus soal (cascade akan otomatis menghapus jawaban terkait)
             $soal->delete();
 
@@ -1745,6 +1803,107 @@ class AdminController extends Controller
                 'message' => 'Gagal menghapus soal',
                 'error' => $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Export semua hasil ujian ke Excel dengan multiple sheets (satu sheet per ujian)
+     * 
+     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse|\Illuminate\Http\JsonResponse
+     */
+    public function exportSemuaHasilUjian()
+    {
+        try {
+            // Cek apakah ada ujian dengan hasil
+            $ujianWithResults = Ujian::whereHas('aktivitasPeserta', function ($query) {
+                $query->whereIn('status', ['sedang_mengerjakan', 'sudah_submit']);
+            })->count();
+
+            if ($ujianWithResults == 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Belum ada hasil ujian yang dapat diekspor'
+                ], 400);
+            }
+
+            // Generate filename dengan timestamp
+            $timestamp = now()->format('Y-m-d_H-i-s');
+            $filename = "Semua_Hasil_Ujian_{$timestamp}.xlsx";
+
+            // Set headers untuk download
+            $headers = [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Cache-Control' => 'max-age=0',
+                'Cache-Control' => 'max-age=1',
+                'Expires' => 'Mon, 26 Jul 1997 05:00:00 GMT',
+                'Last-Modified' => gmdate('D, d M Y H:i:s') . ' GMT',
+                'Cache-Control' => 'cache, must-revalidate',
+                'Pragma' => 'public',
+            ];
+
+            return Excel::download(
+                new SemuaHasilUjianExport(),
+                $filename,
+                \Maatwebsite\Excel\Excel::XLSX,
+                $headers
+            );
+
+        } catch (\Exception $e) {
+            \Log::error('Export Semua Hasil Ujian Error: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengekspor semua hasil ujian',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Pastikan direktori upload ada
+     * 
+     * @return void
+     */
+    private function ensureUploadDirectories(): void
+    {
+        $directories = [
+            public_path('uploads'),
+            public_path('uploads/soal'),
+            public_path('uploads/soal/media'),
+            public_path('uploads/soal/opsi')
+        ];
+
+        foreach ($directories as $directory) {
+            if (!file_exists($directory)) {
+                mkdir($directory, 0755, true);
+            }
+        }
+    }
+
+    /**
+     * Hapus file media yang terkait dengan soal
+     * 
+     * @param \App\Models\Soal $soal
+     * @return void
+     */
+    private function deleteMediaFiles(Soal $soal): void
+    {
+        $mediaFields = [
+            'media_soal',
+            'opsi_a_media',
+            'opsi_b_media', 
+            'opsi_c_media',
+            'opsi_d_media',
+            'opsi_e_media'
+        ];
+
+        foreach ($mediaFields as $field) {
+            if (!empty($soal->$field)) {
+                $filePath = public_path($soal->$field);
+                if (file_exists($filePath)) {
+                    unlink($filePath);
+                }
+            }
         }
     }
 }

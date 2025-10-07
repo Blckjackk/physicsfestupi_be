@@ -54,6 +54,7 @@ Route::prefix('admin')->group(function () {
     // Export Excel
     Route::get('/export/info/{id}', [AdminController::class, 'getInfoExportUjian']); // GET /api/admin/export/info/{id}
     Route::get('/export/hasil-ujian/{id}', [AdminController::class, 'exportHasilUjian']); // GET /api/admin/export/hasil-ujian/{id}
+    Route::get('/export/semua-hasil-ujian', [AdminController::class, 'exportSemuaHasilUjian']); // GET /api/admin/export/semua-hasil-ujian
 });
 
 // Peserta routes untuk sistem CBT

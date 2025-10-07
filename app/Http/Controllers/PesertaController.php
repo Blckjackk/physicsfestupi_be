@@ -62,6 +62,40 @@ class PesertaController extends Controller
                                        ->where('ujian_id', 1)
                                        ->first();
 
+            // Get ujian data dengan waktu mulai dan akhir
+            $ujian = Ujian::find(1);
+
+            // Validasi waktu ujian
+            if ($ujian) {
+                $now = Carbon::now();
+                $waktu_mulai = Carbon::parse($ujian->waktu_mulai_pengerjaan);
+                $waktu_akhir = Carbon::parse($ujian->waktu_akhir_pengerjaan);
+
+                // Jika ujian belum dimulai
+                if ($now->lt($waktu_mulai)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Ujian belum dimulai',
+                        'error_type' => 'exam_not_started',
+                        'waktu_mulai' => $waktu_mulai->format('Y-m-d H:i:s'),
+                        'waktu_sekarang' => $now->format('Y-m-d H:i:s'),
+                        'waktu_mulai_formatted' => $waktu_mulai->format('d M Y, H:i'),
+                    ], 403);
+                }
+
+                // Jika ujian sudah berakhir
+                if ($now->gt($waktu_akhir)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Ujian sudah berakhir',
+                        'error_type' => 'exam_ended',
+                        'waktu_akhir' => $waktu_akhir->format('Y-m-d H:i:s'),
+                        'waktu_sekarang' => $now->format('Y-m-d H:i:s'),
+                        'waktu_akhir_formatted' => $waktu_akhir->format('d M Y, H:i'),
+                    ], 403);
+                }
+            }
+
             $aktivitas_data = [
                 'ujian_id' => 1,
                 'status' => $aktivitas ? $aktivitas->status : 'belum_login',
@@ -69,13 +103,22 @@ class PesertaController extends Controller
                 'waktu_submit' => $aktivitas ? $aktivitas->waktu_submit : null
             ];
 
+            $ujian_data = $ujian ? [
+                'id' => $ujian->id,
+                'nama_ujian' => $ujian->nama_ujian,
+                'deskripsi' => $ujian->deskripsi,
+                'waktu_mulai_pengerjaan' => $ujian->waktu_mulai_pengerjaan,
+                'waktu_akhir_pengerjaan' => $ujian->waktu_akhir_pengerjaan
+            ] : null;
+
             return response()->json([
                 'success' => true,
                 'message' => 'Login berhasil',
                 'data' => [
                     'peserta' => $peserta,
                     'token' => $token,
-                    'aktivitas_ujian' => $aktivitas_data
+                    'aktivitas_ujian' => $aktivitas_data,
+                    'ujian' => $ujian_data
                 ]
             ]);
 
@@ -388,6 +431,35 @@ class PesertaController extends Controller
                 ], 404);
             }
 
+            // Validasi waktu ujian
+            $now = Carbon::now();
+            $waktu_mulai = Carbon::parse($ujian->waktu_mulai_pengerjaan);
+            $waktu_akhir = Carbon::parse($ujian->waktu_akhir_pengerjaan);
+
+            // Jika ujian belum dimulai
+            if ($now->lt($waktu_mulai)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ujian belum dimulai',
+                    'error_type' => 'exam_not_started',
+                    'waktu_mulai' => $waktu_mulai->format('Y-m-d H:i:s'),
+                    'waktu_sekarang' => $now->format('Y-m-d H:i:s'),
+                    'waktu_mulai_formatted' => $waktu_mulai->format('d M Y, H:i'),
+                ], 403);
+            }
+
+            // Jika ujian sudah berakhir
+            if ($now->gt($waktu_akhir)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ujian sudah berakhir',
+                    'error_type' => 'exam_ended',
+                    'waktu_akhir' => $waktu_akhir->format('Y-m-d H:i:s'),
+                    'waktu_sekarang' => $now->format('Y-m-d H:i:s'),
+                    'waktu_akhir_formatted' => $waktu_akhir->format('d M Y, H:i'),
+                ], 403);
+            }
+
             // Ambil soal-soal ujian
             $soal = Soal::where('ujian_id', $ujian_id)
                        ->orderBy('nomor_soal')
@@ -414,6 +486,26 @@ class PesertaController extends Controller
                 return $item;
             });
 
+            // Calculate remaining time based on exam schedule and peserta login time
+            $sekarang = Carbon::now();
+            $waktu_mulai = Carbon::parse($ujian->waktu_mulai_pengerjaan);
+            $waktu_akhir = Carbon::parse($ujian->waktu_akhir_pengerjaan);
+            
+            // Calculate exam duration in seconds
+            $durasi_ujian_detik = $waktu_mulai->diffInSeconds($waktu_akhir);
+            
+            // Check if exam has started
+            if ($sekarang < $waktu_mulai) {
+                // Exam hasn't started yet
+                $waktu_tersisa_detik = $durasi_ujian_detik; // Full duration available
+            } elseif ($sekarang > $waktu_akhir) {
+                // Exam has ended
+                $waktu_tersisa_detik = 0;
+            } else {
+                // Exam is active - calculate remaining time
+                $waktu_tersisa_detik = max(0, $sekarang->diffInSeconds($waktu_akhir, false));
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Soal ujian berhasil diambil',
@@ -421,7 +513,11 @@ class PesertaController extends Controller
                     'ujian' => [
                         'id' => $ujian->id,
                         'nama_ujian' => $ujian->nama_ujian,
-                        'deskripsi' => $ujian->deskripsi
+                        'deskripsi' => $ujian->deskripsi,
+                        'waktu_mulai_pengerjaan' => $ujian->waktu_mulai_pengerjaan,
+                        'waktu_akhir_pengerjaan' => $ujian->waktu_akhir_pengerjaan,
+                        'server_time' => Carbon::now()->toISOString(),
+                        'waktu_tersisa_detik' => $waktu_tersisa_detik
                     ],
                     'total_soal' => $soal->count(),
                     'soal' => $soal_dengan_jawaban

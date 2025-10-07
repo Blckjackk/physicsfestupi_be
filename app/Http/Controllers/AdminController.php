@@ -1001,37 +1001,38 @@ class AdminController extends Controller
     public function getJawabanPeserta(): JsonResponse
     {
         try {
-            // Ambil semua aktivitas peserta yang sudah login dengan relasi yang diperlukan
+            // Ambil semua aktivitas peserta yang sudah mulai ujian dengan relasi yang diperlukan
             $aktivitasPeserta = AktivitasPeserta::with([
                 'peserta:id,username',
-                'ujian:id,nama_ujian',
-                'ujian.soal:id,ujian_id' // Untuk hitung jumlah soal
+                'ujian:id,nama_ujian'
             ])
-            ->whereIn('status', ['sedang_mengerjakan', 'selesai']) // Hanya yang sudah mulai ujian
+            ->whereIn('status', ['sedang_mengerjakan', 'sudah_submit']) // Status yang benar sesuai enum
             ->orderBy('created_at', 'desc')
             ->get();
 
             // Format data hasil ujian
             $hasilUjian = $aktivitasPeserta->map(function ($aktivitas, $index) {
-                // Hitung jumlah soal di ujian
-                $jumlahSoal = $aktivitas->ujian->soal->count();
+                // Hitung jumlah soal di ujian tersebut
+                $jumlahSoal = Soal::where('ujian_id', $aktivitas->ujian_id)->count();
                 
-                // Hitung jumlah soal yang sudah dijawab peserta
+                // Hitung jumlah soal yang sudah dijawab peserta (jawaban tidak null dan tidak kosong)
                 $terjawab = Jawaban::where('peserta_id', $aktivitas->peserta_id)
                                   ->where('ujian_id', $aktivitas->ujian_id)
                                   ->whereNotNull('jawaban_peserta')
+                                  ->where('jawaban_peserta', '!=', '')
                                   ->count();
 
                 return [
-                    'no' => $index + 1,
                     'username' => $aktivitas->peserta->username,
                     'nama_ujian' => $aktivitas->ujian->nama_ujian,
-                    'mulai' => $aktivitas->waktu_login ? $aktivitas->waktu_login->format('d/m/Y H:i:s') : '-',
-                    'selesai' => $aktivitas->waktu_submit ? $aktivitas->waktu_submit->format('d/m/Y H:i:s') : '-',
+                    'mulai' => $aktivitas->waktu_login 
+                        ? \Carbon\Carbon::parse($aktivitas->waktu_login)->format('d/m/Y H:i') 
+                        : 'dd/mm/yy 20:00',
+                    'selesai' => $aktivitas->waktu_submit 
+                        ? \Carbon\Carbon::parse($aktivitas->waktu_submit)->format('d/m/Y H:i') 
+                        : 'dd/mm/yy 21:00',
                     'jumlah_soal' => $jumlahSoal,
                     'terjawab' => $terjawab,
-                    'progress' => $jumlahSoal > 0 ? round(($terjawab / $jumlahSoal) * 100, 1) . '%' : '0%',
-                    'status' => $aktivitas->status === 'selesai' ? 'Selesai' : 'Sedang Ujian',
                     'peserta_id' => $aktivitas->peserta_id,
                     'ujian_id' => $aktivitas->ujian_id,
                     'aktivitas_id' => $aktivitas->id
@@ -1042,11 +1043,7 @@ class AdminController extends Controller
                 'success' => true,
                 'message' => 'Data hasil ujian berhasil diambil',
                 'data' => $hasilUjian,
-                'summary' => [
-                    'total_peserta_ujian' => $hasilUjian->count(),
-                    'sedang_ujian' => $hasilUjian->where('status', 'Sedang Ujian')->count(),
-                    'sudah_selesai' => $hasilUjian->where('status', 'Selesai')->count(),
-                ]
+                'total' => $hasilUjian->count()
             ], 200);
 
         } catch (\Exception $e) {

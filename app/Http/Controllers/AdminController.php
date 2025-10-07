@@ -1542,28 +1542,39 @@ class AdminController extends Controller
     public function createSoal(Request $request): JsonResponse
     {
         try {
-            // Validasi input
+            // DEBUG: Log what we received
+            \Log::info('createSoal called');
+            \Log::info('Request all:', $request->all());
+            \Log::info('Request files:', $request->allFiles());
+            \Log::info('Has media_soal file:', $request->hasFile('media_soal'));
+            \Log::info('Has opsi_a_media file:', $request->hasFile('opsi_a_media'));
+            
+            // Validasi input - allow max 10MB for images
             $validator = Validator::make($request->all(), [
                 'ujian_id' => 'required|exists:ujian,id',
                 'nomor_soal' => 'required|integer|min:1',
                 'tipe_soal' => 'required|in:text,gambar',
                 'deskripsi_soal' => 'nullable|string',
                 'pertanyaan' => 'required|string',
-                'media_soal' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+                'media_soal' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp|max:10240',
                 'opsi_a' => 'nullable|string',
-                'opsi_a_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+                'opsi_a_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp|max:10240',
                 'opsi_b' => 'nullable|string',
-                'opsi_b_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+                'opsi_b_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp|max:10240',
                 'opsi_c' => 'nullable|string',
-                'opsi_c_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+                'opsi_c_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp|max:10240',
                 'opsi_d' => 'nullable|string',
-                'opsi_d_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+                'opsi_d_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp|max:10240',
                 'opsi_e' => 'nullable|string',
-                'opsi_e_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+                'opsi_e_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp|max:10240',
                 'jawaban_benar' => 'required|in:a,b,c,d,e,A,B,C,D,E'
             ]);
 
             if ($validator->fails()) {
+                \Log::error('createSoal validation failed', [
+                    'errors' => $validator->errors()->toArray(),
+                    'request_data' => $request->all()
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Validasi gagal',
@@ -1595,6 +1606,7 @@ class AdminController extends Controller
                 $filename = 'soal_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
                 $file->move(public_path('uploads/soal/media'), $filename);
                 $mediaData['media_soal'] = 'uploads/soal/media/' . $filename;
+                \Log::info('Uploaded media_soal: ' . $mediaData['media_soal']);
             }
             
             // Upload media opsi jika ada
@@ -1606,8 +1618,11 @@ class AdminController extends Controller
                     $filename = 'opsi_' . $option . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
                     $file->move(public_path('uploads/soal/opsi'), $filename);
                     $mediaData[$fieldName] = 'uploads/soal/opsi/' . $filename;
+                    \Log::info("Uploaded {$fieldName}: " . $mediaData[$fieldName]);
                 }
             }
+
+            \Log::info('Final mediaData:', $mediaData);
 
             // Buat soal baru
             $soal = Soal::create(array_merge([
@@ -1624,6 +1639,8 @@ class AdminController extends Controller
                 'jawaban_benar' => strtolower($request->jawaban_benar)
             ], $mediaData));
 
+            \Log::info('Created soal:', $soal->toArray());
+
             return response()->json([
                 'success' => true,
                 'message' => 'Soal berhasil dibuat',
@@ -1631,6 +1648,8 @@ class AdminController extends Controller
             ], 201);
 
         } catch (\Exception $e) {
+            \Log::error('createSoal error: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal membuat soal',
@@ -1649,6 +1668,11 @@ class AdminController extends Controller
     public function updateSoal(Request $request, int $id): JsonResponse
     {
         try {
+            // DEBUG: Log what we received
+            \Log::info("updateSoal called for ID: {$id}");
+            \Log::info('Request all:', $request->all());
+            \Log::info('Request files:', $request->allFiles());
+            
             // Cari soal
             $soal = Soal::find($id);
             
@@ -1659,27 +1683,32 @@ class AdminController extends Controller
                 ], 404);
             }
 
-            // Validasi input
+            // Validasi input - allow max 10MB for images
             $validator = Validator::make($request->all(), [
+                'ujian_id' => 'sometimes|integer|exists:ujian,id',
                 'nomor_soal' => 'sometimes|required|integer|min:1',
                 'tipe_soal' => 'sometimes|required|in:text,gambar',
                 'deskripsi_soal' => 'nullable|string',
                 'pertanyaan' => 'sometimes|required|string',
-                'media_soal' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+                'media_soal' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp|max:10240',
                 'opsi_a' => 'nullable|string',
-                'opsi_a_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+                'opsi_a_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp|max:10240',
                 'opsi_b' => 'nullable|string',
-                'opsi_b_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+                'opsi_b_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp|max:10240',
                 'opsi_c' => 'nullable|string',
-                'opsi_c_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+                'opsi_c_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp|max:10240',
                 'opsi_d' => 'nullable|string',
-                'opsi_d_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+                'opsi_d_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp|max:10240',
                 'opsi_e' => 'nullable|string',
-                'opsi_e_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+                'opsi_e_media' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp|max:10240',
                 'jawaban_benar' => 'sometimes|required|in:a,b,c,d,e,A,B,C,D,E'
             ]);
 
             if ($validator->fails()) {
+                \Log::error('updateSoal validation failed', [
+                    'errors' => $validator->errors()->toArray(),
+                    'request_data' => $request->all()
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Validasi gagal',

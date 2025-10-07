@@ -42,6 +42,7 @@ Route::prefix('admin')->group(function () {
     // CRUD Soal
     Route::get('/soal/{ujian_id}', [AdminController::class, 'getSoalByUjian']); // GET /api/admin/soal/{ujian_id}
     Route::post('/soal', [AdminController::class, 'createSoal']); // POST /api/admin/soal
+    Route::post('/soal/{id}', [AdminController::class, 'updateSoal']); // POST /api/admin/soal/{id} - Support multipart upload
     Route::put('/soal/{id}', [AdminController::class, 'updateSoal']); // PUT /api/admin/soal/{id}
     Route::delete('/soal/{id}', [AdminController::class, 'deleteSoal']); // DELETE /api/admin/soal/{id}
     

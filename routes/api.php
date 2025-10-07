@@ -10,14 +10,6 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 });
 
-// Test route untuk debugging
-Route::get('/test', function () {
-    return response()->json([
-        'message' => 'API is working!',
-        'timestamp' => now()
-    ]);
-});
-
 // Admin routes untuk mengelola sistem CBT
 Route::prefix('admin')->group(function () {
     // Authentication

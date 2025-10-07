@@ -1546,8 +1546,8 @@ class AdminController extends Controller
             \Log::info('createSoal called');
             \Log::info('Request all:', $request->all());
             \Log::info('Request files:', $request->allFiles());
-            \Log::info('Has media_soal file:', $request->hasFile('media_soal'));
-            \Log::info('Has opsi_a_media file:', $request->hasFile('opsi_a_media'));
+            \Log::info('Has media_soal file:', ['has_file' => $request->hasFile('media_soal')]);
+            \Log::info('Has opsi_a_media file:', ['has_file' => $request->hasFile('opsi_a_media')]);
             
             // Validasi input - allow max 10MB for images
             $validator = Validator::make($request->all(), [

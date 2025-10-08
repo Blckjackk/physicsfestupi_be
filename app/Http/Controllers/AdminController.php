@@ -831,9 +831,7 @@ class AdminController extends Controller
                 ], 422);
             }
 
-            \DB::beginTransaction();
-
-            // Buat ujian baru
+            // Buat ujian baru (tanpa otomatis assign ke peserta)
             $ujian = Ujian::create([
                 'nama_ujian' => $request->nama_ujian,
                 'deskripsi' => $request->deskripsi,
@@ -841,40 +839,13 @@ class AdminController extends Controller
                 'waktu_akhir_pengerjaan' => $request->waktu_akhir_pengerjaan
             ]);
 
-            // Otomatis buat aktivitas peserta untuk semua peserta yang ada dengan status belum_login
-            $peserta_list = Peserta::all();
-            $aktivitas_created = [];
-
-            foreach ($peserta_list as $peserta) {
-                $aktivitas = AktivitasPeserta::create([
-                    'peserta_id' => $peserta->id,
-                    'ujian_id' => $ujian->id,
-                    'status' => 'belum_login',
-                    'waktu_login' => null,
-                    'waktu_submit' => null
-                ]);
-
-                $aktivitas_created[] = [
-                    'peserta_id' => $peserta->id,
-                    'username' => $peserta->username,
-                    'status' => 'belum_login'
-                ];
-            }
-
-            \DB::commit();
-
             return response()->json([
                 'success' => true,
-                'message' => 'Ujian berhasil dibuat dengan status otomatis untuk semua peserta',
-                'data' => [
-                    'ujian' => $ujian,
-                    'total_peserta' => count($aktivitas_created),
-                    'aktivitas_peserta' => $aktivitas_created
-                ]
+                'message' => 'Ujian berhasil dibuat',
+                'data' => $ujian
             ], 201);
 
         } catch (\Exception $e) {
-            \DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal membuat ujian',

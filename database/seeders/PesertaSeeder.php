@@ -8,6 +8,7 @@ use Illuminate\Database\Seeder;
 use App\Models\Peserta;
 use App\Models\Ujian;
 use App\Models\Soal;
+use App\Models\AktivitasPeserta;
 use Illuminate\Support\Facades\Hash;
 use Carbon\Carbon;
 
@@ -51,19 +52,19 @@ class PesertaSeeder extends Seeder
             Peserta::create($p);
         }
 
-        // Buat ujian dummy dengan waktu WIB
+        // Buat ujian dummy dengan waktu WIB - untuk testing langsung bisa dimulai
         $ujian = [
             [
                 'nama_ujian' => 'Physics Test Chapter 1-5',
                 'deskripsi' => 'Ujian Fisika materi Kinematika, Dinamika, dan Termodinamika',
-                'waktu_mulai_pengerjaan' => Carbon::now('Asia/Jakarta')->addDay()->setHour(9)->setMinute(0)->setSecond(0),
-                'waktu_akhir_pengerjaan' => Carbon::now('Asia/Jakarta')->addDay()->setHour(11)->setMinute(0)->setSecond(0)
+                'waktu_mulai_pengerjaan' => Carbon::now('Asia/Jakarta')->subMinutes(10), // Dimulai 10 menit yang lalu
+                'waktu_akhir_pengerjaan' => Carbon::now('Asia/Jakarta')->addHours(2)     // Berakhir 2 jam dari sekarang
             ],
             [
                 'nama_ujian' => 'Physics Test Chapter 6-10', 
                 'deskripsi' => 'Ujian Fisika materi Gelombang, Optik, dan Fisika Modern',
-                'waktu_mulai_pengerjaan' => Carbon::now('Asia/Jakarta')->addDays(2)->setHour(14)->setMinute(0)->setSecond(0),
-                'waktu_akhir_pengerjaan' => Carbon::now('Asia/Jakarta')->addDays(2)->setHour(16)->setMinute(0)->setSecond(0)
+                'waktu_mulai_pengerjaan' => Carbon::now('Asia/Jakarta')->addMinutes(30), // Dimulai 30 menit dari sekarang
+                'waktu_akhir_pengerjaan' => Carbon::now('Asia/Jakarta')->addHours(3)     // Berakhir 3 jam dari sekarang
             ]
         ];
 
@@ -187,13 +188,46 @@ class PesertaSeeder extends Seeder
             Soal::create($soal);
         }
 
+        // Buat aktivitas peserta - setiap peserta di-assign ke ujian tertentu
+        $aktivitas = [
+            [
+                'peserta_id' => 1,  // peserta001
+                'ujian_id' => 1,    // ujian pertama
+                'status' => 'belum_login',
+                'waktu_login' => null,
+                'waktu_submit' => null
+            ],
+            [
+                'peserta_id' => 2,  // peserta002  
+                'ujian_id' => 2,    // ujian kedua
+                'status' => 'belum_login',
+                'waktu_login' => null,
+                'waktu_submit' => null
+            ],
+            [
+                'peserta_id' => 3,  // peserta003
+                'ujian_id' => 1,    // ujian pertama
+                'status' => 'belum_login',
+                'waktu_login' => null,
+                'waktu_submit' => null
+            ]
+        ];
+
+        foreach ($aktivitas as $a) {
+            AktivitasPeserta::create($a);
+        }
+
         echo "✅ PesertaSeeder berhasil dijalankan!\n";
         echo "📊 Data yang dibuat:\n";
         echo "   - 3 Peserta (peserta001, peserta002, peserta003)\n";
         echo "   - 2 Ujian dengan waktu WIB\n";
         echo "   - 10 Soal Fisika (5 per ujian)\n";
-        echo "🕐 Jadwal Ujian:\n";
-        echo "   - Ujian 1: Besok jam 09:00-11:00 WIB\n";
-        echo "   - Ujian 2: Lusa jam 14:00-16:00 WIB\n";
+        echo "   - 3 Aktivitas Peserta dengan assignment:\n";
+        echo "     * peserta001 → ujian 1\n";
+        echo "     * peserta002 → ujian 2\n";
+        echo "     * peserta003 → ujian 1\n";
+        echo "🕐 Jadwal Ujian (Testing Ready):\n";
+        echo "   - Ujian 1: AKTIF sekarang (dimulai 10 menit lalu, berakhir 2 jam lagi)\n";
+        echo "   - Ujian 2: Dimulai 30 menit lagi (berakhir 3 jam lagi)\n";
     }
 }

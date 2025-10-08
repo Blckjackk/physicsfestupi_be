@@ -52,36 +52,27 @@ Route::prefix('admin')->group(function () {
 
 // Peserta routes untuk sistem CBT
 Route::prefix('peserta')->group(function () {
-    
-    // Test route untuk peserta
-    Route::post('/test-login', function (Request $request) {
-        return response()->json([
-            'message' => 'Peserta route is working!',
-            'data' => $request->all()
-        ]);
-    });
-    
     // Authentication
     Route::post('/login', [PesertaController::class, 'login']); // POST /api/peserta/login
     Route::post('/logout', [PesertaController::class, 'logout'])->middleware('auth:sanctum'); // POST /api/peserta/logout
     
     // Ujian Management
-    Route::get('/ujian-test', [PesertaController::class, 'getAvailableUjian']); // GET /api/peserta/ujian-test - Test tanpa middleware
     Route::get('/ujian', [PesertaController::class, 'getAvailableUjian']); // GET /api/peserta/ujian - Daftar ujian yang tersedia (no middleware for testing)
     Route::get('/ujian/{id}', [PesertaController::class, 'getUjianDetail']); // GET /api/peserta/ujian/{id} - Detail ujian tertentu (no middleware for testing)
-    Route::post('/ujian/mulai', [PesertaController::class, 'mulaiUjian']); // POST /api/peserta/ujian/mulai - Catat waktu login & status peserta (no middleware for testing)
+    Route::post('/ujian/mulai', [PesertaController::class, 'mulaiUjian']); // POST /api/peserta/ujian/mulai - Catat waktu login & status peserta (otomatis pakai ujian dari admin, no middleware for testing)
     Route::get('/ujian/waktu/{id}', [PesertaController::class, 'cekWaktuUjian']); // GET /api/peserta/ujian/waktu/{id} - Cek apakah ujian sudah bisa dimulai atau belum (no middleware for testing)
     Route::get('/ujian/status/{id}', [PesertaController::class, 'getStatusUjian']); // GET /api/peserta/ujian/status/{id} - Cek status aktivitas peserta untuk ujian tertentu (no middleware for testing)
     
     // Soal Management
-    Route::get('/soal/{ujian_id}', [PesertaController::class, 'getSoalUjian']); // GET /api/peserta/soal/{ujian_id} - Ambil semua soal ujian berdasarkan nomor soal (no middleware for testing)
+    Route::get('/soal', [PesertaController::class, 'getSoalUjianPeserta']); // GET /api/peserta/soal - Ambil semua soal ujian peserta berdasarkan ujian yang ditentukan admin (no middleware for testing)
+    Route::get('/soal/{ujian_id}', [PesertaController::class, 'getSoalUjian']); // GET /api/peserta/soal/{ujian_id} - DEPRECATED: Ambil semua soal ujian berdasarkan ujian_id (no middleware for testing)
     Route::get('/soal/{ujian_id}/{nomor_soal}', [PesertaController::class, 'getSoalByNomor']); // GET /api/peserta/soal/{ujian_id}/{nomor_soal} - Ambil soal tertentu berdasarkan nomor soal (no middleware for testing)
     
     // Jawaban Management
-    Route::post('/jawaban', [PesertaController::class, 'simpanJawaban']); // POST /api/peserta/jawaban - Kirim jawaban pilihan ganda peserta (auto-save) (no middleware for testing)
+    Route::post('/jawaban', [PesertaController::class, 'simpanJawaban']); // POST /api/peserta/jawaban - Kirim jawaban pilihan ganda peserta (auto-save, otomatis pakai ujian dari admin, no middleware for testing)
     Route::get('/jawaban/{ujian_id}', [PesertaController::class, 'getJawabanPeserta']); // GET /api/peserta/jawaban/{ujian_id} - Untuk memuat ulang jawaban peserta (no middleware for testing)
     
     // Submit ujian
-    Route::post('/ujian/selesai', [PesertaController::class, 'selesaiUjian']); // POST /api/peserta/ujian/selesai - Submit ujian & update status jadi sudah_submit (no middleware for testing)
+    Route::post('/ujian/selesai', [PesertaController::class, 'selesaiUjian']); // POST /api/peserta/ujian/selesai - Submit ujian & update status jadi sudah_submit (otomatis pakai ujian dari admin, no middleware for testing)
     Route::post('/ujian/auto-save', [PesertaController::class, 'autoSaveJawaban']); // POST /api/peserta/ujian/auto-save - Auto save jawaban peserta (no middleware for testing)
 });

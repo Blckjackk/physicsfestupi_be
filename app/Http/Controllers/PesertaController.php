@@ -16,6 +16,54 @@ use App\Models\AktivitasPeserta;
 class PesertaController extends Controller
 {
     /**
+     * Helper method untuk auto-update status aktivitas peserta
+     */
+    private function autoUpdateStatusAktivitas($peserta_id, $ujian_id)
+    {
+        $ujian = Ujian::find($ujian_id);
+        if (!$ujian) {
+            return false;
+        }
+
+        $now = Carbon::now()->setTimezone('Asia/Jakarta');
+        $waktu_mulai = Carbon::parse($ujian->waktu_mulai_pengerjaan)->setTimezone('Asia/Jakarta');
+        $waktu_akhir = Carbon::parse($ujian->waktu_akhir_pengerjaan)->setTimezone('Asia/Jakarta');
+
+        // Get or create aktivitas peserta
+        $aktivitas = AktivitasPeserta::firstOrCreate(
+            [
+                'peserta_id' => $peserta_id,
+                'ujian_id' => $ujian_id
+            ],
+            [
+                'status' => 'belum_login',
+                'waktu_login' => null,
+                'waktu_submit' => null
+            ]
+        );
+
+        // Auto-update status berdasarkan waktu dan kondisi saat ini
+        if ($now->lt($waktu_mulai)) {
+            // Ujian belum mulai
+            if ($aktivitas->status === 'belum_login') {
+                $aktivitas->status = 'belum_mulai';
+                $aktivitas->save();
+            }
+        } elseif ($now->gte($waktu_mulai) && $now->lt($waktu_akhir)) {
+            // Ujian sedang berlangsung
+            if (in_array($aktivitas->status, ['belum_login', 'belum_mulai'])) {
+                $aktivitas->status = 'sedang_mengerjakan';
+                if (!$aktivitas->waktu_login) {
+                    $aktivitas->waktu_login = $now;
+                }
+                $aktivitas->save();
+            }
+        }
+
+        return $aktivitas;
+    }
+
+    /**
      * Login peserta
      */
     public function login(Request $request)
@@ -220,6 +268,9 @@ class PesertaController extends Controller
     public function cekWaktuUjian(Request $request, $id)
     {
         try {
+            // For testing without middleware, use peserta_id from request or default to 1
+            $peserta_id = $request->peserta_id ?? 1; // Default peserta ID for testing
+
             $ujian = Ujian::find($id);
 
             if (!$ujian) {
@@ -228,6 +279,9 @@ class PesertaController extends Controller
                     'message' => 'Ujian tidak ditemukan'
                 ], 404);
             }
+
+            // Auto-update status aktivitas peserta
+            $this->autoUpdateStatusAktivitas($peserta_id, $id);
 
             // Pastikan semua waktu menggunakan timezone Asia/Jakarta (WIB)
             $now = Carbon::now()->setTimezone('Asia/Jakarta');
@@ -420,6 +474,15 @@ class PesertaController extends Controller
                     'peserta_id' => $peserta_id,
                     'request_data' => $request->all()
                 ]);
+            }
+
+            // Auto-update status aktivitas peserta
+            $aktivitas = $this->autoUpdateStatusAktivitas($peserta_id, $ujian_id);
+            if (!$aktivitas) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ujian tidak ditemukan'
+                ], 404);
             }
 
             // Cek apakah ujian ada
@@ -615,6 +678,9 @@ class PesertaController extends Controller
                     'peserta_id' => $peserta_id
                 ]);
             }
+
+            // Auto-update status aktivitas peserta
+            $this->autoUpdateStatusAktivitas($peserta_id, $request->ujian_id);
 
             // Ambil jawaban benar dari soal
             $soal = Soal::find($request->soal_id);
@@ -832,73 +898,92 @@ class PesertaController extends Controller
                 ]);
             }
 
-            DB::beginTransaction();
+            // Cek apakah sudah pernah submit (prevent double submit)
+            $aktivitas = AktivitasPeserta::where('peserta_id', $peserta_id)
+                                       ->where('ujian_id', $ujian_id)
+                                       ->first();
 
-            // Get or create aktivitas peserta
-            $aktivitas = AktivitasPeserta::firstOrCreate(
-                [
-                    'peserta_id' => $peserta_id,
-                    'ujian_id' => $ujian_id
-                ],
-                [
-                    'status' => 'belum_login',
-                    'waktu_login' => null,
-                    'waktu_submit' => null
-                ]
-            );
-
-            if ($aktivitas->status === 'sudah_submit') {
-                DB::rollBack();
+            if ($aktivitas && $aktivitas->status === 'sudah_submit') {
                 return response()->json([
                     'success' => false,
                     'message' => 'Ujian sudah pernah di-submit sebelumnya',
                     'data' => [
+                        'status' => 'sudah_submit',
                         'waktu_submit_sebelumnya' => $aktivitas->waktu_submit->setTimezone('Asia/Jakarta')->format('Y-m-d H:i:s T')
                     ]
                 ], 400);
             }
 
-            // Update status dan waktu submit
-            $waktu_submit = Carbon::now('Asia/Jakarta');
-            $aktivitas->status = 'sudah_submit';
-            $aktivitas->waktu_submit = $waktu_submit;
-            $aktivitas->save();
+            DB::beginTransaction();
 
-            // Hitung nilai total
-            $total_benar = Jawaban::where('peserta_id', $peserta_id)
-                                ->where('ujian_id', $ujian_id)
-                                ->where('benar', 1)
-                                ->count();
+            // Get or create aktivitas peserta jika belum ada
+            if (!$aktivitas) {
+                $aktivitas = AktivitasPeserta::firstOrCreate(
+                    [
+                        'peserta_id' => $peserta_id,
+                        'ujian_id' => $ujian_id
+                    ],
+                    [
+                        'status' => 'belum_login',
+                        'waktu_login' => null,
+                        'waktu_submit' => null
+                    ]
+                );
+            }
 
-            $total_soal = Soal::where('ujian_id', $ujian_id)->count();
-            $total_jawaban = Jawaban::where('peserta_id', $peserta_id)
-                                  ->where('ujian_id', $ujian_id)
-                                  ->count();
+            // Update status dan waktu submit - hanya jika belum submit
+            if ($aktivitas->status !== 'sudah_submit') {
+                $waktu_submit = Carbon::now('Asia/Jakarta');
+                $aktivitas->status = 'sudah_submit';
+                $aktivitas->waktu_submit = $waktu_submit;
+                $aktivitas->save();
 
-            $nilai = $total_soal > 0 ? round(($total_benar / $total_soal) * 100, 2) : 0;
+                // Hitung nilai total
+                $total_benar = Jawaban::where('peserta_id', $peserta_id)
+                                    ->where('ujian_id', $ujian_id)
+                                    ->where('benar', 1)
+                                    ->count();
 
-            // Update nilai di tabel peserta
-            $peserta = Peserta::find($peserta_id);
-            $peserta->nilai_total = $nilai;
-            $peserta->save();
+                $total_soal = Soal::where('ujian_id', $ujian_id)->count();
+                $total_jawaban = Jawaban::where('peserta_id', $peserta_id)
+                                      ->where('ujian_id', $ujian_id)
+                                      ->count();
 
-            DB::commit();
+                $nilai = $total_soal > 0 ? round(($total_benar / $total_soal) * 100, 2) : 0;
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Ujian berhasil diselesaikan',
-                'data' => [
-                    'peserta_id' => $peserta_id,
-                    'ujian_id' => $ujian_id,
-                    'waktu_submit' => $waktu_submit->format('Y-m-d H:i:s T'),
-                    'total_soal' => $total_soal,
-                    'total_jawaban' => $total_jawaban,
-                    'total_benar' => $total_benar,
-                    'total_salah' => $total_jawaban - $total_benar,
-                    'nilai_total' => $nilai,
-                    'status' => 'sudah_submit'
-                ]
-            ]);
+                // Update nilai di tabel peserta
+                $peserta = Peserta::find($peserta_id);
+                $peserta->nilai_total = $nilai;
+                $peserta->save();
+
+                DB::commit();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Ujian berhasil diselesaikan',
+                    'data' => [
+                        'peserta_id' => $peserta_id,
+                        'ujian_id' => $ujian_id,
+                        'waktu_submit' => $waktu_submit->format('Y-m-d H:i:s T'),
+                        'total_soal' => $total_soal,
+                        'total_jawaban' => $total_jawaban,
+                        'total_benar' => $total_benar,
+                        'total_salah' => $total_jawaban - $total_benar,
+                        'nilai_total' => $nilai,
+                        'status' => 'sudah_submit'
+                    ]
+                ]);
+            } else {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ujian sudah pernah di-submit sebelumnya',
+                    'data' => [
+                        'status' => 'sudah_submit',
+                        'waktu_submit_sebelumnya' => $aktivitas->waktu_submit->setTimezone('Asia/Jakarta')->format('Y-m-d H:i:s T')
+                    ]
+                ], 400);
+            }
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();

@@ -799,7 +799,7 @@ class AdminController extends Controller
                 // Hitung statistik berdasarkan status aktivitas peserta
                 $jumlahPendaftar = $ujianItem->aktivitasPeserta->count();
                 $sedangMengerjakan = $ujianItem->aktivitasPeserta->where('status', 'sedang_mengerjakan')->count();
-                $selesai = $ujianItem->aktivitasPeserta->where('status', 'selesai')->count();
+                $selesai = $ujianItem->aktivitasPeserta->where('status', 'sudah_submit')->count();
                 
                 return [
                     'no' => $index + 1,

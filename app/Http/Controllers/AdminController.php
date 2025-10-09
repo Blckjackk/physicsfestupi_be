@@ -86,6 +86,61 @@ class AdminController extends Controller
         }
     }
 
+    /**
+     * Get current admin data for authentication validation
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getMe(Request $request): JsonResponse
+    {
+        try {
+            // Cek header Authorization
+            $authHeader = $request->header('Authorization');
+            
+            if (!$authHeader || !str_starts_with($authHeader, 'Bearer ')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Token tidak ditemukan'
+                ], 401);
+            }
+
+            // Extract token (untuk simulasi, karena belum pakai Sanctum sepenuhnya)
+            $token = substr($authHeader, 7); // Remove "Bearer " prefix
+            
+            // Validasi token (simulasi - dalam implementasi nyata gunakan Sanctum)
+            // Untuk sekarang, kita asumsikan token valid jika ada
+            if (empty($token)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Token tidak valid'
+                ], 401);
+            }
+
+            // Simulasi: ambil admin berdasarkan token atau hardcode untuk testing
+            // Dalam implementasi nyata, gunakan $request->user() dengan Sanctum
+            
+            // Untuk testing, kembalikan data admin dummy
+            return response()->json([
+                'success' => true,
+                'message' => 'Data admin berhasil diambil',
+                'data' => [
+                    'id' => 1,
+                    'username' => 'admin',
+                    'role' => 'admin',
+                    'created_at' => now()
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil data admin',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     // ====== DASHBOARD ======
 
     /**
@@ -744,7 +799,7 @@ class AdminController extends Controller
                 // Hitung statistik berdasarkan status aktivitas peserta
                 $jumlahPendaftar = $ujianItem->aktivitasPeserta->count();
                 $sedangMengerjakan = $ujianItem->aktivitasPeserta->where('status', 'sedang_mengerjakan')->count();
-                $selesai = $ujianItem->aktivitasPeserta->where('status', 'selesai')->count();
+                $selesai = $ujianItem->aktivitasPeserta->where('status', 'sudah_submit')->count();
                 
                 return [
                     'no' => $index + 1,

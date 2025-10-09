@@ -14,6 +14,7 @@ Route::get('/user', function (Request $request) {
 Route::prefix('admin')->group(function () {
     // Authentication
     Route::post('/login', [AdminController::class, 'loginAdmin']); // POST /api/admin/login
+    Route::get('/me', [AdminController::class, 'getMe']); // GET /api/admin/me - Get current admin data
     
     // Dashboard
     Route::get('/dashboard', [AdminController::class, 'getDashboard']); // GET /api/admin/dashboard
@@ -64,6 +65,7 @@ Route::prefix('peserta')->group(function () {
     // Authentication
     Route::post('/login', [PesertaController::class, 'login']); // POST /api/peserta/login
     Route::post('/logout', [PesertaController::class, 'logout'])->middleware('auth:sanctum'); // POST /api/peserta/logout
+    Route::get('/me', [PesertaController::class, 'getMe']); // GET /api/peserta/me - Get current peserta data
     
     // Ujian Management
     Route::get('/ujian-test', [PesertaController::class, 'getAvailableUjian']); // GET /api/peserta/ujian-test - Test tanpa middleware

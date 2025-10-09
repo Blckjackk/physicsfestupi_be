@@ -217,6 +217,60 @@ class PesertaController extends Controller
     }
 
     /**
+     * Get current peserta data for authentication validation
+     * 
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getMe(Request $request)
+    {
+        try {
+            // Cek header Authorization
+            $authHeader = $request->header('Authorization');
+            
+            if (!$authHeader || !str_starts_with($authHeader, 'Bearer ')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Token tidak ditemukan'
+                ], 401);
+            }
+
+            // Extract token (untuk simulasi, karena belum pakai Sanctum sepenuhnya)
+            $token = substr($authHeader, 7); // Remove "Bearer " prefix
+            
+            // Validasi token (simulasi - dalam implementasi nyata gunakan Sanctum)
+            if (empty($token)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Token tidak valid'
+                ], 401);
+            }
+
+            // Simulasi: untuk testing, kembalikan data peserta dummy
+            // Dalam implementasi nyata, gunakan $request->user() dengan Sanctum
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Data peserta berhasil diambil',
+                'data' => [
+                    'id' => 1,
+                    'username' => 'peserta01',
+                    'nama_lengkap' => 'Test Peserta',
+                    'role' => 'peserta',
+                    'created_at' => now()
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil data peserta',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Mendapatkan daftar ujian yang tersedia
      */
     public function getAvailableUjian(Request $request)

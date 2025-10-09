@@ -16,6 +16,15 @@ use App\Models\AktivitasPeserta;
 class PesertaController extends Controller
 {
     /**
+     * Helper method untuk mendapatkan ujian_id yang di-assign ke peserta
+     */
+    private function getPesertaUjianId($peserta_id)
+    {
+        $aktivitas = AktivitasPeserta::where('peserta_id', $peserta_id)->first();
+        return $aktivitas ? $aktivitas->ujian_id : null;
+    }
+
+    /**
      * Helper method untuk auto-update status aktivitas peserta
      */
     private function autoUpdateStatusAktivitas($peserta_id, $ujian_id)
@@ -104,14 +113,22 @@ class PesertaController extends Controller
             // $token = $peserta->createToken('peserta-token')->plainTextToken;
             $token = 'temporary-token-' . $peserta->id . '-' . time();
 
-            // Get aktivitas peserta untuk ujian_id = 1 (default)
-            // Cek status apakah peserta sudah submit atau belum
-            $aktivitas = AktivitasPeserta::where('peserta_id', $peserta->id)
-                                       ->where('ujian_id', 1)
-                                       ->first();
+            // Get aktivitas peserta - ambil ujian yang di-assign ke peserta ini
+            $aktivitas = AktivitasPeserta::where('peserta_id', $peserta->id)->first();
+            
+            if (!$aktivitas) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Peserta belum di-assign ke ujian manapun',
+                    'debug' => [
+                        'peserta_id' => $peserta->id,
+                        'username' => $peserta->username
+                    ]
+                ], 403);
+            }
 
-            // Get ujian data dengan waktu mulai dan akhir
-            $ujian = Ujian::find(1);
+            // Get ujian data berdasarkan aktivitas peserta
+            $ujian = Ujian::find($aktivitas->ujian_id);
 
             // Validasi waktu ujian
             if ($ujian) {
@@ -145,10 +162,10 @@ class PesertaController extends Controller
             }
 
             $aktivitas_data = [
-                'ujian_id' => 1,
-                'status' => $aktivitas ? $aktivitas->status : 'belum_login',
-                'waktu_login' => $aktivitas ? $aktivitas->waktu_login : null,
-                'waktu_submit' => $aktivitas ? $aktivitas->waktu_submit : null
+                'ujian_id' => $aktivitas->ujian_id,
+                'status' => $aktivitas->status,
+                'waktu_login' => $aktivitas->waktu_login,
+                'waktu_submit' => $aktivitas->waktu_submit
             ];
 
             $ujian_data = $ujian ? [
@@ -338,10 +355,22 @@ class PesertaController extends Controller
 
             // For testing without middleware, use peserta_id from request or default to 1
             $peserta_id = $request->peserta_id ?? 1; // Default peserta ID for testing
-            $ujian_id = $request->ujian_id;
+            
+            // Get ujian_id yang benar dari peserta (ignore request ujian_id untuk konsistensi)
+            $peserta_ujian_id = $this->getPesertaUjianId($peserta_id);
+            if (!$peserta_ujian_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Peserta belum di-assign ke ujian manapun',
+                    'debug' => [
+                        'peserta_id' => $peserta_id,
+                        'request_ujian_id' => $request->ujian_id
+                    ]
+                ], 403);
+            }
 
             // Cek apakah ujian masih berjalan
-            $ujian = Ujian::find($ujian_id);
+            $ujian = Ujian::find($peserta_ujian_id);
             $now = Carbon::now()->setTimezone('Asia/Jakarta');
             $waktu_mulai = Carbon::parse($ujian->waktu_mulai_pengerjaan)->setTimezone('Asia/Jakarta');
             $waktu_akhir = Carbon::parse($ujian->waktu_akhir_pengerjaan)->setTimezone('Asia/Jakarta');
@@ -350,7 +379,7 @@ class PesertaController extends Controller
             $aktivitas = AktivitasPeserta::firstOrCreate(
                 [
                     'peserta_id' => $peserta_id,
-                    'ujian_id' => $ujian_id
+                    'ujian_id' => $peserta_ujian_id
                 ],
                 [
                     'status' => 'belum_login',
@@ -433,8 +462,21 @@ class PesertaController extends Controller
         try {
             $peserta_id = $request->user()->id;
             
+            // Get ujian_id yang benar dari peserta (ignore parameter URL)
+            $peserta_ujian_id = $this->getPesertaUjianId($peserta_id);
+            if (!$peserta_ujian_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Peserta belum di-assign ke ujian manapun',
+                    'debug' => [
+                        'peserta_id' => $peserta_id,
+                        'url_ujian_id' => $id
+                    ]
+                ], 403);
+            }
+            
             $aktivitas = AktivitasPeserta::where('peserta_id', $peserta_id)
-                                       ->where('ujian_id', $id)
+                                       ->where('ujian_id', $peserta_ujian_id)
                                        ->first();
 
             $status = $aktivitas ? $aktivitas->status : 'belum_login';
@@ -466,18 +508,32 @@ class PesertaController extends Controller
             // For testing without middleware, use peserta_id from request or default to 1
             $peserta_id = $request->peserta_id ?? 1; // Default peserta ID for testing
             
+            // Get ujian_id yang benar dari peserta (ignore parameter URL untuk mencegah bug)
+            $peserta_ujian_id = $this->getPesertaUjianId($peserta_id);
+            if (!$peserta_ujian_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Peserta belum di-assign ke ujian manapun',
+                    'debug' => [
+                        'peserta_id' => $peserta_id,
+                        'url_ujian_id' => $ujian_id
+                    ]
+                ], 403);
+            }
+            
             // Debug info
             if ($request->has('debug')) {
                 return response()->json([
                     'debug' => true,
-                    'ujian_id' => $ujian_id,
+                    'url_ujian_id' => $ujian_id,
+                    'peserta_ujian_id' => $peserta_ujian_id,
                     'peserta_id' => $peserta_id,
                     'request_data' => $request->all()
                 ]);
             }
 
-            // Auto-update status aktivitas peserta
-            $aktivitas = $this->autoUpdateStatusAktivitas($peserta_id, $ujian_id);
+            // Auto-update status aktivitas peserta menggunakan ujian_id yang benar
+            $aktivitas = $this->autoUpdateStatusAktivitas($peserta_id, $peserta_ujian_id);
             if (!$aktivitas) {
                 return response()->json([
                     'success' => false,
@@ -485,8 +541,8 @@ class PesertaController extends Controller
                 ], 404);
             }
 
-            // Cek apakah ujian ada
-            $ujian = Ujian::find($ujian_id);
+            // Cek apakah ujian ada (gunakan ujian_id yang benar)
+            $ujian = Ujian::find($peserta_ujian_id);
             if (!$ujian) {
                 return response()->json([
                     'success' => false,
@@ -523,8 +579,8 @@ class PesertaController extends Controller
                 ], 403);
             }
 
-            // Ambil soal-soal ujian
-            $soal = Soal::where('ujian_id', $ujian_id)
+            // Ambil soal-soal ujian (gunakan ujian_id yang benar)
+            $soal = Soal::where('ujian_id', $peserta_ujian_id)
                        ->orderBy('nomor_soal')
                        ->get();
 
@@ -535,9 +591,9 @@ class PesertaController extends Controller
                 ], 404);
             }
 
-            // Ambil jawaban peserta yang sudah tersimpan
+            // Ambil jawaban peserta yang sudah tersimpan (gunakan ujian_id yang benar)
             $jawaban_peserta = Jawaban::where('peserta_id', $peserta_id)
-                                    ->where('ujian_id', $ujian_id)
+                                    ->where('ujian_id', $peserta_ujian_id)
                                     ->get()
                                     ->keyBy('soal_id');
 
@@ -670,17 +726,31 @@ class PesertaController extends Controller
             // For testing without middleware, use peserta_id from request or default to 1
             $peserta_id = $request->peserta_id ?? 1; // Default peserta ID for testing
             
+            // Get ujian_id yang benar dari peserta (ignore request ujian_id untuk mencegah bug)
+            $peserta_ujian_id = $this->getPesertaUjianId($peserta_id);
+            if (!$peserta_ujian_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Peserta belum di-assign ke ujian manapun',
+                    'debug' => [
+                        'peserta_id' => $peserta_id,
+                        'request_ujian_id' => $request->ujian_id
+                    ]
+                ], 403);
+            }
+            
             // Debug info
             if ($request->has('debug')) {
                 return response()->json([
                     'debug' => true,
                     'request_data' => $request->all(),
-                    'peserta_id' => $peserta_id
+                    'peserta_id' => $peserta_id,
+                    'peserta_ujian_id' => $peserta_ujian_id
                 ]);
             }
 
-            // Auto-update status aktivitas peserta
-            $this->autoUpdateStatusAktivitas($peserta_id, $request->ujian_id);
+            // Auto-update status aktivitas peserta (gunakan ujian_id yang benar)
+            $this->autoUpdateStatusAktivitas($peserta_id, $peserta_ujian_id);
 
             // Ambil jawaban benar dari soal
             $soal = Soal::find($request->soal_id);
@@ -693,11 +763,11 @@ class PesertaController extends Controller
 
             $benar = ($request->jawaban === $soal->jawaban_benar) ? 1 : 0;
 
-            // Simpan atau update jawaban
+            // Simpan atau update jawaban (gunakan ujian_id yang benar)
             $jawaban = Jawaban::updateOrCreate(
                 [
                     'peserta_id' => $peserta_id,
-                    'ujian_id' => $request->ujian_id,
+                    'ujian_id' => $peserta_ujian_id,
                     'soal_id' => $request->soal_id
                 ],
                 [
@@ -715,7 +785,7 @@ class PesertaController extends Controller
                 'data' => [
                     'jawaban_id' => $jawaban->id,
                     'peserta_id' => $peserta_id,
-                    'ujian_id' => $request->ujian_id,
+                    'ujian_id' => $peserta_ujian_id,
                     'soal_id' => $request->soal_id,
                     'nomor_soal' => $nomor_soal,
                     'jawaban' => $request->jawaban,
@@ -822,18 +892,32 @@ class PesertaController extends Controller
             // For testing without middleware, use peserta_id from request or default to 1
             $peserta_id = $request->peserta_id ?? 1; // Default peserta ID for testing
 
+            // Get ujian_id yang benar dari peserta (ignore parameter URL)
+            $peserta_ujian_id = $this->getPesertaUjianId($peserta_id);
+            if (!$peserta_ujian_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Peserta belum di-assign ke ujian manapun',
+                    'debug' => [
+                        'peserta_id' => $peserta_id,
+                        'url_ujian_id' => $ujian_id
+                    ]
+                ], 403);
+            }
+
             // Debug info
             if ($request->has('debug')) {
                 return response()->json([
                     'debug' => true,
-                    'ujian_id' => $ujian_id,
+                    'url_ujian_id' => $ujian_id,
+                    'peserta_ujian_id' => $peserta_ujian_id,
                     'peserta_id' => $peserta_id,
                     'request_data' => $request->all()
                 ]);
             }
 
             $jawaban = Jawaban::where('peserta_id', $peserta_id)
-                            ->where('ujian_id', $ujian_id)
+                            ->where('ujian_id', $peserta_ujian_id)
                             ->with('soal:id,nomor_soal,pertanyaan')
                             ->get();
 
@@ -886,21 +970,34 @@ class PesertaController extends Controller
 
             // For testing without middleware, use peserta_id from request or default to 1
             $peserta_id = $request->peserta_id ?? 1; // Default peserta ID for testing
-            $ujian_id = $request->ujian_id;
+            
+            // Get ujian_id yang benar dari peserta (ignore request ujian_id)
+            $peserta_ujian_id = $this->getPesertaUjianId($peserta_id);
+            if (!$peserta_ujian_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Peserta belum di-assign ke ujian manapun',
+                    'debug' => [
+                        'peserta_id' => $peserta_id,
+                        'request_ujian_id' => $request->ujian_id
+                    ]
+                ], 403);
+            }
 
             // Debug info
             if ($request->has('debug')) {
                 return response()->json([
                     'debug' => true,
-                    'ujian_id' => $ujian_id,
+                    'request_ujian_id' => $request->ujian_id,
+                    'peserta_ujian_id' => $peserta_ujian_id,
                     'peserta_id' => $peserta_id,
                     'request_data' => $request->all()
                 ]);
             }
 
-            // Cek apakah sudah pernah submit (prevent double submit)
+            // Cek apakah sudah pernah submit (prevent double submit) - gunakan ujian_id yang benar
             $aktivitas = AktivitasPeserta::where('peserta_id', $peserta_id)
-                                       ->where('ujian_id', $ujian_id)
+                                       ->where('ujian_id', $peserta_ujian_id)
                                        ->first();
 
             if ($aktivitas && $aktivitas->status === 'sudah_submit') {
@@ -916,12 +1013,12 @@ class PesertaController extends Controller
 
             DB::beginTransaction();
 
-            // Get or create aktivitas peserta jika belum ada
+            // Get or create aktivitas peserta jika belum ada - gunakan ujian_id yang benar
             if (!$aktivitas) {
                 $aktivitas = AktivitasPeserta::firstOrCreate(
                     [
                         'peserta_id' => $peserta_id,
-                        'ujian_id' => $ujian_id
+                        'ujian_id' => $peserta_ujian_id
                     ],
                     [
                         'status' => 'belum_login',
@@ -938,15 +1035,15 @@ class PesertaController extends Controller
                 $aktivitas->waktu_submit = $waktu_submit;
                 $aktivitas->save();
 
-                // Hitung nilai total
+                // Hitung nilai total - gunakan ujian_id yang benar
                 $total_benar = Jawaban::where('peserta_id', $peserta_id)
-                                    ->where('ujian_id', $ujian_id)
+                                    ->where('ujian_id', $peserta_ujian_id)
                                     ->where('benar', 1)
                                     ->count();
 
-                $total_soal = Soal::where('ujian_id', $ujian_id)->count();
+                $total_soal = Soal::where('ujian_id', $peserta_ujian_id)->count();
                 $total_jawaban = Jawaban::where('peserta_id', $peserta_id)
-                                      ->where('ujian_id', $ujian_id)
+                                      ->where('ujian_id', $peserta_ujian_id)
                                       ->count();
 
                 $nilai = $total_soal > 0 ? round(($total_benar / $total_soal) * 100, 2) : 0;
@@ -963,7 +1060,7 @@ class PesertaController extends Controller
                     'message' => 'Ujian berhasil diselesaikan',
                     'data' => [
                         'peserta_id' => $peserta_id,
-                        'ujian_id' => $ujian_id,
+                        'ujian_id' => $peserta_ujian_id,
                         'waktu_submit' => $waktu_submit->format('Y-m-d H:i:s T'),
                         'total_soal' => $total_soal,
                         'total_jawaban' => $total_jawaban,

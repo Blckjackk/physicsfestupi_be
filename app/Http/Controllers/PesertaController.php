@@ -1017,6 +1017,19 @@ class PesertaController extends Controller
     public function selesaiUjian(Request $request)
     {
         try {
+            // Debug logging
+            \Log::info('selesaiUjian request:', $request->all());
+            
+            // Check if ujian exists first
+            $ujian_id = $request->ujian_id;
+            $ujian_exists = \App\Models\Ujian::where('id', $ujian_id)->exists();
+            
+            \Log::info('Ujian validation:', [
+                'ujian_id' => $ujian_id,
+                'ujian_exists' => $ujian_exists,
+                'all_ujian_ids' => \App\Models\Ujian::pluck('id')->toArray()
+            ]);
+            
             $request->validate([
                 'ujian_id' => 'required|integer|exists:ujian,id',
                 'peserta_id' => 'sometimes|integer|exists:peserta,id' // Optional for testing
@@ -1138,10 +1151,22 @@ class PesertaController extends Controller
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
+            \Log::error('Validation error in selesaiUjian:', [
+                'errors' => $e->errors(),
+                'request' => $request->all()
+            ]);
+            
             return response()->json([
                 'success' => false,
-                'message' => 'Validation error',
-                'errors' => $e->errors()
+                'message' => 'Validation error: ' . implode(', ', array_flatten($e->errors())),
+                'errors' => $e->errors(),
+                'debug' => [
+                    'request_data' => $request->all(),
+                    'validation_rules' => [
+                        'ujian_id' => 'required|integer|exists:ujian,id',
+                        'peserta_id' => 'sometimes|integer|exists:peserta,id'
+                    ]
+                ]
             ], 422);
         } catch (\Exception $e) {
             DB::rollBack();

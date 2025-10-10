@@ -49,6 +49,7 @@ class HasilUjianPerSheetExport implements FromCollection, WithHeadings, WithMapp
     protected $ujianNama;
     protected $ujian;
     protected $soalList;
+    protected $rowNumber = 0; // Counter untuk nomor urut
 
     public function __construct($ujianId, $ujianNama)
     {
@@ -110,6 +111,9 @@ class HasilUjianPerSheetExport implements FromCollection, WithHeadings, WithMapp
      */
     public function map($aktivitas): array
     {
+        // Increment counter untuk nomor urut
+        $this->rowNumber++;
+        
         // Hitung statistik
         $totalSoal = $this->soalList->count();
         $dijawab = Jawaban::where('peserta_id', $aktivitas->peserta_id)
@@ -137,7 +141,7 @@ class HasilUjianPerSheetExport implements FromCollection, WithHeadings, WithMapp
         }
 
         $baseData = [
-            $aktivitas->id,
+            $this->rowNumber, // Menggunakan counter mulai dari 1
             $aktivitas->peserta->username,
             $aktivitas->ujian->nama_ujian,
             $this->getStatusText($aktivitas->status),
